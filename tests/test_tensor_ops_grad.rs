@@ -10,7 +10,9 @@ fn get() {
     let v = &env.slot().set(ndarray::arr1(&[1., 2., 3.]));
 
     env.run(|graph| {
-        let var = graph.var_tensors_by_id(graph.env()).collect::<HashMap<_, _>>();
+        let var = graph
+            .var_tensors_by_id(graph.env())
+            .collect::<HashMap<_, _>>();
         let v = var[v];
         let a: ag::Tensor<f64> = 2. * v;
         let z = a.access_elem(1);
@@ -222,7 +224,6 @@ fn sqrt() {
     let rng = ag::ndarray_ext::ArrayRng::<f64>::default();
     let v = env.slot().set(rng.random_uniform(&[3], 0.9, 1.1));
     env.run(|graph| {
-        let rng = ag::ndarray_ext::ArrayRng::<f64>::default();
         let v = graph.variable_by_id(v);
         let z = T::sqrt(v);
         T::add(v, z);
@@ -250,7 +251,6 @@ fn ln() {
     let rng = ag::ndarray_ext::ArrayRng::<f64>::default();
     let v = env.slot().set(rng.random_uniform(&[3], 1., 1.1));
     env.run(|graph| {
-        use std::f64;
         let v = graph.variable_by_id(v);
         let z = T::ln(v);
         let g = T::grad(&[z], &[v]);

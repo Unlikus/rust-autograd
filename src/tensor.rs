@@ -3,14 +3,14 @@ use crate::Float;
 use crate::{op, Graph};
 use crate::{NdArray, NdArrayView};
 
-use crate::graph::{AsGraphRepr, GraphRepr};
+use crate::graph::{AsRawGraph, RawGraph};
 use crate::op::{GradientContext, InputArray, OpError};
-use crate::variable::{VariableEnvironment, VarArrayID};
+use crate::variable::VarArrayID;
+use std::cell::Ref;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::{Add, Div, Mul, Sub};
-use std::cell::Ref;
 
 /// Lazy N-dimensional array.
 ///
@@ -55,7 +55,7 @@ use std::cell::Ref;
 #[derive(Clone, Copy)]
 pub struct Tensor<'graph, F: Float> {
     pub(crate) id: usize,
-    pub(crate) graph: &'graph GraphRepr<F>,
+    pub(crate) graph: &'graph RawGraph<F>,
 }
 
 impl<'graph, F: Float> Tensor<'graph, F> {
@@ -67,7 +67,7 @@ impl<'graph, F: Float> Tensor<'graph, F> {
     pub(crate) fn input_tensor(
         &self,
         i: usize,
-        g: &'graph GraphRepr<F>,
+        g: &'graph RawGraph<F>,
     ) -> Option<Tensor<'graph, F>> {
         self.inner().in_edges.get(i).map(|x| x.as_tensor(g))
     }
@@ -79,13 +79,13 @@ impl<'graph, F: Float> Tensor<'graph, F> {
 
     /// Returns the graph to which this tensor belongs.
     #[inline]
-    pub fn graph(&self) -> &'graph GraphRepr<F> {
+    pub fn graph(&self) -> &'graph RawGraph<F> {
         self.graph
     }
 
     /// Returns a mutable ref of the graph to which this tensor belongs.
     #[inline]
-    pub fn graph_mut(&mut self) -> &'graph GraphRepr<F> {
+    pub fn graph_mut(&mut self) -> &'graph RawGraph<F> {
         &mut self.graph
     }
 
@@ -145,7 +145,7 @@ impl<'graph, F: Float> Tensor<'graph, F> {
 
     #[inline]
     /// Creates a new [TensorBuilder](struct.TensorBuilder.html).
-    pub fn builder(graph: &'graph impl AsGraphRepr<F>) -> TensorBuilder<'graph, F> {
+    pub fn builder(graph: &'graph impl AsRawGraph<F>) -> TensorBuilder<'graph, F> {
         // Starts with default values
         TensorBuilder {
             graph: graph.as_graph_repr(),
@@ -531,17 +531,17 @@ impl<'graph> Input {
     }
 
     #[inline(always)]
-    pub(crate) fn as_tensor<F: Float>(&self, graph: &'graph GraphRepr<F>) -> Tensor<'graph, F> {
+    pub(crate) fn as_tensor<F: Float>(&self, graph: &'graph RawGraph<F>) -> Tensor<'graph, F> {
         graph.tensor(self.id)
     }
 
     #[inline]
-    pub(crate) fn variable_id<F: Float>(&self, graph: &GraphRepr<F>) -> Option<VarArrayID> {
+    pub(crate) fn variable_id<F: Float>(&self, graph: &RawGraph<F>) -> Option<VarArrayID> {
         graph.access_inner(self.id).variable_id
     }
 
     #[inline]
-    pub(crate) fn is_placeholder<F: Float>(&self, graph: &GraphRepr<F>) -> bool {
+    pub(crate) fn is_placeholder<F: Float>(&self, graph: &RawGraph<F>) -> bool {
         graph.access_inner(self.id).is_placeholder
     }
 }
@@ -571,7 +571,7 @@ impl<'graph> Input {
 /// });
 /// ```
 pub struct TensorBuilder<'g, F: Float> {
-    graph: &'g GraphRepr<F>,
+    graph: &'g RawGraph<F>,
     shape: Option<usize>,
     in_nodes: op::InputArray<Input>,
     can_have_gradient: bool,
@@ -627,7 +627,6 @@ impl KnownShape {
         self.is_fully_defined
     }
 }
-
 
 #[test]
 fn test_topo_order() {
@@ -878,11 +877,11 @@ impl_bin_op_between_tensors!(Div, div, DivOp);
 
 /// Implementors can be converted to `Tensor`.
 pub trait AsTensor<'graph, F: Float> {
-    fn as_tensor(&self, graph: &'graph impl AsGraphRepr<F>) -> Tensor<'graph, F>;
+    fn as_tensor(&self, graph: &'graph impl AsRawGraph<F>) -> Tensor<'graph, F>;
 }
 
 impl<'graph, F: Float> AsTensor<'graph, F> for Tensor<'graph, F> {
-    fn as_tensor(&self, _: &'graph impl AsGraphRepr<F>) -> Tensor<'graph, F> {
+    fn as_tensor(&self, _: &'graph impl AsRawGraph<F>) -> Tensor<'graph, F> {
         *self
     }
 }
@@ -890,7 +889,7 @@ impl<'graph, F: Float> AsTensor<'graph, F> for Tensor<'graph, F> {
 macro_rules! impl_as_tensor_for_array {
     ($num_elems:expr) => {
         impl<'graph, F: Float, I: crate::Int> AsTensor<'graph, F> for [I; $num_elems] {
-            fn as_tensor(&self, graph: &'graph impl AsGraphRepr<F>) -> Tensor<'graph, F> {
+            fn as_tensor(&self, graph: &'graph impl AsRawGraph<F>) -> Tensor<'graph, F> {
                 let vec = self
                     .iter()
                     .map(|&a| F::from(a).unwrap())
@@ -915,7 +914,7 @@ impl_as_tensor_for_array!(7);
 impl_as_tensor_for_array!(8);
 
 impl<'graph, F: Float, I: crate::Int> AsTensor<'graph, F> for [I; 3] {
-    fn as_tensor(&self, graph: &'graph impl AsGraphRepr<F>) -> Tensor<'graph, F> {
+    fn as_tensor(&self, graph: &'graph impl AsRawGraph<F>) -> Tensor<'graph, F> {
         let vec = self
             .iter()
             .map(|&a| F::from(a).unwrap())

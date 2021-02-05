@@ -2,13 +2,12 @@
 //!
 use crate::ndarray_ext::{NdArrayView, NdArrayViewMut};
 use crate::smallvec::SmallVec;
-use crate::tensor::{Tensor, TensorInternal};
+use crate::tensor::Tensor;
 use crate::{Float, NdArray};
 use std::any::type_name;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem;
-use std::cell::{RefCell, RefMut};
 
 // Properties for op's `compute` method.
 // Actual number of inout/output nodes are around 1~2 in most cases.
@@ -319,7 +318,7 @@ impl<'g, 't, 'v, T: Float> ComputeContext<'v, T> {
 pub struct GradientContext<'g, T: Float> {
     gy: Tensor<'g, T>,
     y: Tensor<'g, T>,
-    graph: &'g crate::graph::GraphRepr<T>,
+    graph: &'g crate::graph::RawGraph<T>,
     gxs: InputArray<Option<Tensor<'g, T>>>,
 }
 
@@ -327,7 +326,7 @@ impl<'g, T: Float> GradientContext<'g, T> {
     pub(crate) fn new(
         gy: Tensor<'g, T>,
         y: Tensor<'g, T>,
-        graph: &'g crate::graph::GraphRepr<T>,
+        graph: &'g crate::graph::RawGraph<T>,
     ) -> Self {
         GradientContext {
             gy,
@@ -394,7 +393,7 @@ impl<'g, T: Float> GradientContext<'g, T> {
 
     /// Returns a graph object that is usable for tensor computations in the context.
     #[inline]
-    pub fn graph(&self) -> &'g crate::graph::GraphRepr<T> {
+    pub fn graph(&self) -> &'g crate::graph::RawGraph<T> {
         self.graph
     }
 

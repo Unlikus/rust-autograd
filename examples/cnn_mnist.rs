@@ -3,13 +3,12 @@ extern crate ndarray;
 
 use ag::optimizers::adam;
 use ag::rand::seq::SliceRandom;
+use ag::tensor_ops as T;
 use ag::variable::NamespaceTrait;
 use ag::{ndarray_ext as array, Graph};
 use ndarray::s;
 use std::collections::HashMap;
-use std::ops::Deref;
 use std::time::Instant;
-use ag::tensor_ops as T;
 
 type Tensor<'graph> = ag::Tensor<'graph, f32>;
 

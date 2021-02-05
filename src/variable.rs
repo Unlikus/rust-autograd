@@ -1,15 +1,15 @@
 use crate::graph::Graph;
-use crate::{uuid::Uuid, Float, FxHashMap, GraphRepr, NdArray};
-use smallvec::alloc::borrow::Cow;
-use smallvec::alloc::fmt::Formatter;
-use std::cell::{RefCell, UnsafeCell};
-use std::ops::Deref;
-use std::path::Path;
+use crate::{uuid::Uuid, Float, FxHashMap, NdArray, RawGraph};
 use serde::Deserialize;
 use serde_json;
-use std::fs::File;
-use std::error::Error;
+use smallvec::alloc::borrow::Cow;
+use smallvec::alloc::fmt::Formatter;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::error::Error;
+use std::fs::File;
+use std::ops::Deref;
+use std::path::Path;
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq, Debug, Serialize, Deserialize)]
 /// Variable array's ID that is unique in a `VariableEnvironment`.
@@ -94,8 +94,6 @@ pub struct VariableEnvironment<'name, F> {
     pub(crate) array_list: Vec<Variable<F>>,
     pub(crate) name_to_id: FxHashMap<FullName<'name>, VarArrayID>,
 }
-
-
 
 /// Identifies variable array
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -232,7 +230,6 @@ pub trait NamespaceTrait<F: Float> {
             })
             .collect()
     }
-
 }
 
 impl<'ns, 'env, 'name, F: Float, S: Into<String>> NamedVariableSlot<'ns, 'env, 'name, F, S> {
@@ -329,35 +326,89 @@ impl<'env, 'name, F: Float> NamespaceTrait<F> for VariableNamespaceMut<'env, 'na
 
 impl<'e: 'name, 'name, F: Float> VariableNamespace<'e, 'name, F> {
     /// Returns an iterator of variable arrays and those names in this namespace
-    fn iter(&'name self) -> impl Iterator<Item=(&'name str, &RefCell<NdArray<F>>)> {
+    #[allow(unused)]
+    fn iter(&'name self) -> impl Iterator<Item = (&'name str, &RefCell<NdArray<F>>)> {
         iter(self)
     }
 }
 
 impl<'e: 'name, 'name, F: Float> VariableNamespaceMut<'e, 'name, F> {
     /// Returns an iterator of variable arrays and those names in this namespace
-    fn iter(&'name self) -> impl Iterator<Item=(&'name str, &RefCell<NdArray<F>>)> {
+    #[allow(unused)]
+    fn iter(&'name self) -> impl Iterator<Item = (&'name str, &RefCell<NdArray<F>>)> {
         iter(self)
     }
 }
 
-fn iter<'name, F: Float>(ns: &'name impl NamespaceTrait<F>) -> impl Iterator<Item=(&'name str, &RefCell<NdArray<F>>)> {
-    ns.env()
-        .name_to_id
-        .iter()
-        .filter_map(move |ent| {
-            // filter out other namespaces
-            if &ent.0.namespace_id == ns.name() {
-                Some((ent.0.variable_name.deref(), ns.get_array_by_name(ent.0.variable_name.deref()).unwrap()))
-            } else {
-                None
-            }
-        })
+fn iter<'name, F: Float>(
+    ns: &'name impl NamespaceTrait<F>,
+) -> impl Iterator<Item = (&'name str, &RefCell<NdArray<F>>)> {
+    ns.env().name_to_id.iter().filter_map(move |ent| {
+        // filter out other namespaces
+        if &ent.0.namespace_id == ns.name() {
+            Some((
+                ent.0.variable_name.deref(),
+                ns.get_array_by_name(ent.0.variable_name.deref()).unwrap(),
+            ))
+        } else {
+            None
+        }
+    })
 }
 impl<'ns, 'env, 'name, F: Float> VariableNamespaceMut<'env, 'name, F> {
     /// Makes a temporary slot for registering the variable array in this namespace.
     pub fn slot(&'ns mut self) -> VariableSlot<'ns, 'env, 'name, F> {
         VariableSlot { namespace: self }
+    }
+}
+
+#[test]
+fn test_env_iter() {
+    let mut env = VariableEnvironment::<f32>::new();
+    let v1 = env.slot().set(crate::ndarray_ext::zeros(&[3, 2]));
+    let v2 = env.slot().set(crate::ndarray_ext::zeros(&[2, 3]));
+    for (i, (vid, arr)) in env.iter().enumerate() {
+        if i == 0 {
+            assert_eq!(vid, v1);
+            assert_eq!(arr.borrow().shape(), &[3, 2]);
+        }
+        if i == 1 {
+            assert_eq!(vid, v2);
+            assert_eq!(arr.borrow().shape(), &[2, 3]);
+        }
+    }
+}
+
+#[test]
+fn test_namespace_iter() {
+    let mut env = VariableEnvironment::<f32>::new();
+    env.slot()
+        .with_name("v1")
+        .set(crate::ndarray_ext::zeros(&[3, 2]));
+    env.slot()
+        .with_name("v2")
+        .set(crate::ndarray_ext::zeros(&[2, 3]));
+
+    for (i, (name, arr)) in env.default_namespace().iter().enumerate() {
+        if i == 0 {
+            assert_eq!(name, "v1");
+            assert_eq!(arr.borrow().shape(), &[3, 2]);
+        }
+        if i == 1 {
+            assert_eq!(name, "v2");
+            assert_eq!(arr.borrow().shape(), &[2, 3]);
+        }
+    }
+
+    for (i, (name, arr)) in env.default_namespace_mut().iter().enumerate() {
+        if i == 0 {
+            assert_eq!(name, "v1");
+            assert_eq!(arr.borrow().shape(), &[3, 2]);
+        }
+        if i == 1 {
+            assert_eq!(name, "v2");
+            assert_eq!(arr.borrow().shape(), &[2, 3]);
+        }
     }
 }
 
@@ -378,15 +429,20 @@ impl<'env, 'name> VariableEnvironment<'name, f32> {
     /// Creates a new VariableEnvironment using the one previously made persistent.
     ///
     /// Returns the result of the execution.
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<VariableEnvironment<'name, f32>, Box<dyn Error>> {
+    pub fn load<P: AsRef<Path>>(
+        path: P,
+    ) -> Result<VariableEnvironment<'name, f32>, Box<dyn Error>> {
         let raw: DeserializedVariableEnvironment<f32> = Self::deserialize(path)?;
         Self::load_internal(raw)
     }
 
     /// Initialize this instance using the one previously made persistent.
-    pub fn init<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Box<dyn Error>>{
+    pub fn init<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Box<dyn Error>> {
         let raw: DeserializedVariableEnvironment<f32> = Self::deserialize(path)?;
-        let VariableEnvironment { array_list, name_to_id } = Self::load_internal(raw)?;
+        let VariableEnvironment {
+            array_list,
+            name_to_id,
+        } = Self::load_internal(raw)?;
         self.array_list = array_list;
         self.name_to_id = name_to_id;
         Ok(())
@@ -395,19 +451,23 @@ impl<'env, 'name> VariableEnvironment<'name, f32> {
 
 // f64 save and load
 impl<'env, 'name> VariableEnvironment<'name, f64> {
-
     /// Creates a new VariableEnvironment using the one previously made persistent.
     ///
     /// Returns the result of the execution.
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<VariableEnvironment<'name, f64>, Box<dyn Error>> {
+    pub fn load<P: AsRef<Path>>(
+        path: P,
+    ) -> Result<VariableEnvironment<'name, f64>, Box<dyn Error>> {
         let raw: DeserializedVariableEnvironment<f64> = Self::deserialize(path)?;
         Self::load_internal(raw)
     }
 
     /// Initialize this instance using the one previously made persistent.
-    pub fn init<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Box<dyn Error>>{
+    pub fn init<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Box<dyn Error>> {
         let raw: DeserializedVariableEnvironment<f64> = Self::deserialize(path)?;
-        let VariableEnvironment { array_list, name_to_id } = Self::load_internal(raw)?;
+        let VariableEnvironment {
+            array_list,
+            name_to_id,
+        } = Self::load_internal(raw)?;
         self.array_list = array_list;
         self.name_to_id = name_to_id;
         Ok(())
@@ -423,10 +483,12 @@ impl<'env, 'name, F: Float> VariableEnvironment<'name, F> {
     }
 
     /// Returns an iterator of variable arrays and those ids in this env.
-    pub fn iter(&'env self) -> impl Iterator<Item=(VarArrayID, &RefCell<NdArray<F>>)> {
-        self.array_list.iter().enumerate().map(|(i, v)| {
-            (VarArrayID::from(i), v)
-        })
+    #[allow(unused)]
+    pub fn iter(&'env self) -> impl Iterator<Item = (VarArrayID, &RefCell<NdArray<F>>)> {
+        self.array_list
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (VarArrayID::from(i), v))
     }
 
     /// Saves the current VariableEnvironment to storage.
@@ -439,38 +501,47 @@ impl<'env, 'name, F: Float> VariableEnvironment<'name, F> {
     }
 
     fn deserialize<T, P: AsRef<Path>>(path: P) -> Result<T, Box<dyn Error>>
-        where T: for<'de> Deserialize<'de>
+    where
+        T: for<'de> Deserialize<'de>,
     {
         let f = File::open(path.as_ref())?;
         let ret = serde_json::from_reader(f)?;
         Ok(ret)
     }
 
-    fn load_internal<T>(env: DeserializedVariableEnvironment<T>) -> Result<VariableEnvironment<'name, T>, Box<dyn Error>> {
-        let name_to_id: FxHashMap<FullName, VarArrayID> = env.name_to_id.iter().map(|(fullname, &vid)| {
-            let mut split = fullname.split("\u{0001}").into_iter();
-            let namespace_id = split.next().unwrap().to_owned();
-            let var_name = split.next().unwrap().to_owned();
-            let fullname = FullName {
-                namespace_id: Cow::Owned(namespace_id),
-                variable_name: Cow::Owned(var_name)
-            };
-            (fullname, vid)
-        }).collect();
+    fn load_internal<T>(
+        env: DeserializedVariableEnvironment<T>,
+    ) -> Result<VariableEnvironment<'name, T>, Box<dyn Error>> {
+        let name_to_id: FxHashMap<FullName, VarArrayID> = env
+            .name_to_id
+            .iter()
+            .map(|(fullname, &vid)| {
+                let mut split = fullname.split("\u{0001}").into_iter();
+                let namespace_id = split.next().unwrap().to_owned();
+                let var_name = split.next().unwrap().to_owned();
+                let fullname = FullName {
+                    namespace_id: Cow::Owned(namespace_id),
+                    variable_name: Cow::Owned(var_name),
+                };
+                (fullname, vid)
+            })
+            .collect();
 
         Ok(VariableEnvironment {
             array_list: env.array_list,
-            name_to_id
+            name_to_id,
         })
     }
 
     fn prepare_for_serde(&self) -> SerializableVariableEnvironment<F> {
-        let name_to_id: FxHashMap<String, VarArrayID> = self.name_to_id.iter().map(|(fullname, vid)| {
-            (fullname.to_string(), *vid)
-        }).collect();
+        let name_to_id: FxHashMap<String, VarArrayID> = self
+            .name_to_id
+            .iter()
+            .map(|(fullname, vid)| (fullname.to_string(), *vid))
+            .collect();
         SerializableVariableEnvironment {
             array_list: &self.array_list,
-            name_to_id
+            name_to_id,
         }
     }
 
@@ -484,10 +555,7 @@ impl<'env, 'name, F: Float> VariableEnvironment<'name, F> {
     /// The return value is immutable, its usage is limited to variable lookup etc.
     /// Use `namespace_mut` to register variable.
     #[inline]
-    pub fn namespace(
-        &'env self,
-        namespace_id: &'static str,
-    ) -> VariableNamespace<'env, 'name, F> {
+    pub fn namespace(&'env self, namespace_id: &'static str) -> VariableNamespace<'env, 'name, F> {
         VariableNamespace {
             namespace_id,
             env: self,
@@ -538,7 +606,7 @@ impl<'env, 'name, F: Float> VariableEnvironment<'name, F> {
     where
         FN: FnOnce(&mut Graph<'env, 'name, F>) -> R,
     {
-        let g = GraphRepr {
+        let g = RawGraph {
             node_set: RefCell::new(Vec::with_capacity(256)),
             variable2node: RefCell::new(FxHashMap::default()),
         };
@@ -569,8 +637,8 @@ fn compile_common_usages() {
 
 #[test]
 fn save_and_load() {
-    use std::fs;
     use crate::approx::AbsDiffEq;
+    use std::fs;
 
     let dir = "/tmp/autograd/test_save_and_load";
     fs::create_dir_all(dir).unwrap();
@@ -602,7 +670,6 @@ fn save_and_load() {
 #[test]
 fn save_and_init() {
     use std::fs;
-    use crate::approx::AbsDiffEq;
 
     let dir = "/tmp/autograd/test_save_and_init";
     fs::create_dir_all(dir).unwrap();
@@ -615,10 +682,10 @@ fn save_and_init() {
 
     for _ in 0..10 {
         env.run(|g| {
-            let a = g.variable_by_id(a);
-            let b = g.variable_by_id(b);
+            let _a_ = g.variable_by_id(a);
+            let _b_ = g.variable_by_id(b);
             g.env().save(&path).unwrap();
-            g.env_mut().init(&path);
+            g.env_mut().init(&path).unwrap();
         });
     }
 }

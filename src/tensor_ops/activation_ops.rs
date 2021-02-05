@@ -1,13 +1,13 @@
 use crate::ndarray_ext::{NdArray, NdArrayView};
 use crate::op;
 #[cfg(feature = "mkl")]
-use crate::tensor_ops::blas_ffi::*;
-#[cfg(feature = "mkl")]
 use crate::same_type;
 use crate::tensor::Tensor;
+#[cfg(feature = "mkl")]
+use crate::tensor_ops::blas_ffi::*;
+use crate::tensor_ops::*;
 use crate::Float;
 use ndarray;
-use crate::tensor_ops::*;
 
 pub struct ELU<T: Float> {
     pub alpha: T,
@@ -103,7 +103,6 @@ impl<T: Float> op::Op<T> for Softmax {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let s = ctx.graph();
         let y = ctx.output();
         let gy = ctx.output_grad();
         let sum = reduce_sum(y * gy, &[self.axis], true);

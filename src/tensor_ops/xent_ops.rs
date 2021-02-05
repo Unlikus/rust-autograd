@@ -1,8 +1,8 @@
 use crate::ndarray_ext::{NdArray, NdArrayView};
 use crate::op;
+use crate::tensor::Tensor;
 use crate::tensor_ops;
 use crate::tensor_ops::*;
-use crate::tensor::Tensor;
 use crate::Float;
 use ndarray;
 
@@ -22,7 +22,6 @@ impl<T: Float> op::Op<T> for LogSoftmax {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let s = ctx.graph();
         let gy = ctx.output_grad();
         let sm = exp(ctx.output());
         let sum = reduce_sum(gy, &[1], true);
@@ -178,7 +177,6 @@ impl<T: Float> op::Op<T> for SoftmaxCrossEntropy {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let s = ctx.graph();
         let output = ctx.output();
         let log_x = nth_tensor(output, 1);
         let gy = ctx.output_grad();

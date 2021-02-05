@@ -227,20 +227,17 @@ impl<T: Float> crate::op::Op<T> for MaxPool2D {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let s = ctx.graph();
         let gy = &ctx.output_grad();
         let y = &ctx.output();
         let indices = nth_tensor(y, 1);
         let gx = Tensor::builder(ctx.graph())
             .append_input(gy, false)
             .append_input(&indices, false)
-            .build(
-                MaxPool2DGrad {
-                    pad: self.pad,
-                    stride: self.stride,
-                    size: self.size,
-                },
-            );
+            .build(MaxPool2DGrad {
+                pad: self.pad,
+                stride: self.stride,
+                size: self.size,
+            });
         ctx.append_input_grad(Some(gx));
     }
 }
@@ -283,18 +280,15 @@ impl<T: Float> crate::op::Op<T> for MaxPool2DGrad {
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let ggx = &ctx.output_grad();
-        let s = ctx.graph();
         let argmax = &ctx.input(1);
         let ggy = Tensor::builder(ctx.graph())
             .append_input(&ggx, false)
             .append_input(argmax, false)
-            .build(
-                MaxPool2DGradGrad {
-                    pad: self.pad,
-                    stride: self.stride,
-                    size: self.size,
-                },
-            );
+            .build(MaxPool2DGradGrad {
+                pad: self.pad,
+                stride: self.stride,
+                size: self.size,
+            });
         ctx.append_input_grad(Some(ggy));
         ctx.append_input_grad(None);
     }

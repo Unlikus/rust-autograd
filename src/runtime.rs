@@ -3,7 +3,7 @@ use crate::op::{self, ComputeContext, InputArray, OpInput};
 use crate::smallvec::SmallVec;
 use crate::tensor::{Tensor, TensorInternal};
 use crate::variable::VarArrayID;
-use crate::{Float, GraphRepr};
+use crate::{Float, RawGraph};
 use crate::{FxHashMap, Graph, VariableEnvironment};
 use std::cell::{Ref, RefMut, UnsafeCell};
 
@@ -358,7 +358,7 @@ impl<'v, 'e, F: Float> VariableGuardRegister<'v, F> {
     }
 }
 
-impl<F: Float> GraphRepr<F> {
+impl<F: Float> RawGraph<F> {
     fn eval<'feed, 'tensor, 'g, A>(
         &'g self,
         tensors: &'tensor [A],
@@ -385,88 +385,86 @@ impl<F: Float> GraphRepr<F> {
         }
 
         while let Some((node_id, is_parent)) = dfs_stack.pop() {
-            unsafe {
-                //  in this block, relocation of Graph::node_set's contents must not be occurred
-                let node = self.access_inner(node_id);
-                if is_parent {
-                    if would_not_visit(&node, &node_info_map) {
-                        continue;
+            //  in this block, relocation of Graph::node_set's contents must not be occurred
+            let node = self.access_inner(node_id);
+            if is_parent {
+                if would_not_visit(&node, &node_info_map) {
+                    continue;
+                }
+
+                // =====================================================================================
+                // Aggregate input values for `node`. if any of the inputs failed, it's a total failure.
+                // =====================================================================================
+
+                let mut xs = InputArray::new();
+
+                let mut input_status = Ok(());
+
+                // Save var guards
+                for (in_node, _) in node.in_edges.iter().zip(&node.input_indices) {
+                    if let Some(vid) = in_node.variable_id(self) {
+                        // is variable array
+                        variable_guard_register.set(vid, in_node.mut_usage, ctx);
                     }
+                }
 
-                    // =====================================================================================
-                    // Aggregate input values for `node`. if any of the inputs failed, it's a total failure.
-                    // =====================================================================================
-
-                    let mut xs = InputArray::new();
-
-                    let mut input_status = Ok(());
-
-                    // Save var guards
-                    for (in_node, _) in node.in_edges.iter().zip(&node.input_indices) {
-                        if let Some(vid) = in_node.variable_id(self) {
+                for (in_node, &in_idx) in node.in_edges.iter().zip(&node.input_indices) {
+                    // `in_idx` is not 0 only when `in_node` is multi-output op and `node` selects nth value from it using `Graph::nth_tensor`.
+                    let x = {
+                        if in_node.is_placeholder(self) {
+                            Ok(OpInput::new(retrieve_feed(feeds, in_node.id)))
+                        } else if let Some(vid) = in_node.variable_id(self) {
                             // is variable array
-                            variable_guard_register.set(vid, in_node.mut_usage, ctx);
-                        }
-                    }
-
-                    for (in_node, &in_idx) in node.in_edges.iter().zip(&node.input_indices) {
-                        // `in_idx` is not 0 only when `in_node` is multi-output op and `node` selects nth value from it using `Graph::nth_tensor`.
-                        let x = {
-                            if in_node.is_placeholder(self) {
-                                Ok(OpInput::new(retrieve_feed(feeds, in_node.id)))
-                            } else if let Some(vid) = in_node.variable_id(self) {
-                                // is variable array
-                                Ok(variable_guard_register.borrow(vid, in_node.mut_usage))
-                            } else {
-                                // Search the value of input nodes.
-                                match &node_info_map.get(&in_node.id).unwrap() {
-                                    Err(e) => Err(e.clone()),
-                                    Ok(vi_list) => Ok(OpInput::new(storage.get(vi_list[in_idx]))),
-                                }
-                            }
-                        };
-                        match x {
-                            Ok(x) => xs.push(x),
-                            Err(e) => {
-                                input_status = Err(e);
-                                break;
+                            Ok(variable_guard_register.borrow(vid, in_node.mut_usage))
+                        } else {
+                            // Search the value of input nodes.
+                            match &node_info_map.get(&in_node.id).unwrap() {
+                                Err(e) => Err(e.clone()),
+                                Ok(vi_list) => Ok(OpInput::new(storage.get(vi_list[in_idx]))),
                             }
                         }
-                    }
-
-                    // ====================================================
-                    // Run Op::compute() if `node`'s inputs were not failed
-                    // ====================================================
-
-                    let installed_node_info = input_status.and_then(|()| {
-                        // let mut ctx = ComputeContext::new(node, xs);
-                        let mut ctx = ComputeContext::new(xs);
-                        let status = node.get_op().compute(&mut ctx);
-                        let ret = status.map(|()| ctx.ys);
-                        // register compute result
-                        let results = install_compute_results(ret, &storage);
-                        results
-                    });
-
-                    // Release var guards
-                    for (in_node, _) in node.in_edges.iter().zip(&node.input_indices) {
-                        if let Some(vid) = in_node.variable_id(self) {
-                            // is variable array
-                            variable_guard_register.unset(vid, in_node.mut_usage);
+                    };
+                    match x {
+                        Ok(x) => xs.push(x),
+                        Err(e) => {
+                            input_status = Err(e);
+                            break;
                         }
                     }
+                }
 
-                    // Cache the result
-                    node_info_map.insert(node_id, installed_node_info);
-                } else {
-                    // Update dfs stack
-                    dfs_stack.push((node_id, true));
-                    // Push children if needed
-                    for child in &node.in_edges {
-                        let child = self.access_inner(child.id);
-                        if !would_not_visit(&child, &node_info_map) {
-                            dfs_stack.push((child.id, false));
-                        }
+                // ====================================================
+                // Run Op::compute() if `node`'s inputs were not failed
+                // ====================================================
+
+                let installed_node_info = input_status.and_then(|()| {
+                    // let mut ctx = ComputeContext::new(node, xs);
+                    let mut ctx = ComputeContext::new(xs);
+                    let status = node.get_op().compute(&mut ctx);
+                    let ret = status.map(|()| ctx.ys);
+                    // register compute result
+                    let results = install_compute_results(ret, &storage);
+                    results
+                });
+
+                // Release var guards
+                for (in_node, _) in node.in_edges.iter().zip(&node.input_indices) {
+                    if let Some(vid) = in_node.variable_id(self) {
+                        // is variable array
+                        variable_guard_register.unset(vid, in_node.mut_usage);
+                    }
+                }
+
+                // Cache the result
+                node_info_map.insert(node_id, installed_node_info);
+            } else {
+                // Update dfs stack
+                dfs_stack.push((node_id, true));
+                // Push children if needed
+                for child in &node.in_edges {
+                    let child = self.access_inner(child.id);
+                    if !would_not_visit(&child, &node_info_map) {
+                        dfs_stack.push((child.id, false));
                     }
                 }
             }
@@ -507,8 +505,6 @@ impl<F: Float> GraphRepr<F> {
     }
 }
 
-use crate::tensor_ops as T;
-
 #[inline]
 fn would_not_visit<F: Float>(
     node: &Ref<TensorInternal<F>>,
@@ -519,6 +515,8 @@ fn would_not_visit<F: Float>(
 
 #[test]
 fn test_eval2() {
+    use crate::tensor_ops as T;
+
     let mut ctx = crate::VariableEnvironment::new();
     ctx.run(|g: &mut Graph<f32>| {
         let a = g.ones(&[1, 1]);
@@ -529,6 +527,8 @@ fn test_eval2() {
 
 #[test]
 fn test_eval() {
+    use crate::tensor_ops as T;
+
     let mut ctx = VariableEnvironment::new();
     ctx.run(|g| {
         let v: Tensor<f32> = g.placeholder(&[3, 2, 1]);

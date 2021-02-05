@@ -1,24 +1,22 @@
 //! Defining things related to `ag::Graph`.
 
-
-use crate::variable::{VarArrayID, FullName, NamespaceTrait, VariableNamespace};
 use crate::tensor::{Tensor, TensorInternal};
+use crate::variable::{FullName, NamespaceTrait, VarArrayID, VariableNamespace};
 use crate::{Float, FxHashMap, VariableEnvironment};
 use smallvec::alloc::borrow::Cow;
+use std::cell::RefCell;
+use std::cell::{Ref, RefMut};
 use std::fmt;
 use std::ops::Deref;
-use std::{cell::RefCell, collections::HashMap};
-use std::cell::{Ref, RefMut};
-use crate::op::Op;
 
 type TensorID = usize;
 
-pub struct GraphRepr<F: Float> {
+pub struct RawGraph<F: Float> {
     pub(crate) node_set: RefCell<Vec<TensorInternal<F>>>,
     pub(crate) variable2node: RefCell<FxHashMap<VarArrayID, TensorID>>,
 }
 
-impl<'t, 'g, F: Float> GraphRepr<F> {
+impl<'t, 'g, F: Float> RawGraph<F> {
     #[inline]
     pub(crate) fn install(&'g self, mut node: TensorInternal<F>) -> TensorID {
         let mut inner = self.node_set.borrow_mut();
@@ -96,9 +94,8 @@ impl<'t, 'g, F: Float> GraphRepr<F> {
     pub fn var_tensors_by_id<'e: 'g>(
         &'g self,
         env: &'e VariableEnvironment<F>,
-    ) -> impl Iterator<Item=(VarArrayID, Tensor<'g, F>)> {
-        (0..env.array_list.len())
-            .map(move |vid| (vid.into(), self.variable_by_id(vid.into())))
+    ) -> impl Iterator<Item = (VarArrayID, Tensor<'g, F>)> {
+        (0..env.array_list.len()).map(move |vid| (vid.into(), self.variable_by_id(vid.into())))
     }
 
     /// Returns a map of `Tensor`s associated with the names in the specified namespace.
@@ -107,22 +104,19 @@ impl<'t, 'g, F: Float> GraphRepr<F> {
     pub fn var_tensors_by_name<'e: 'name + 'g, 'name>(
         &'g self,
         ns: &'name VariableNamespace<'e, 'name, F>,
-    ) -> impl Iterator<Item=(&'name str, Tensor<'g, F>)> {
-        ns.env()
-            .name_to_id
-            .iter()
-            .filter_map(move |ent| {
-                // filter out other namespaces
-                if &ent.0.namespace_id == ns.name() {
-                    Some((ent.0.variable_name.deref(), self.variable_by_id(*ent.1)))
-                } else {
-                    None
-                }
-            })
+    ) -> impl Iterator<Item = (&'name str, Tensor<'g, F>)> {
+        ns.env().name_to_id.iter().filter_map(move |ent| {
+            // filter out other namespaces
+            if &ent.0.namespace_id == ns.name() {
+                Some((ent.0.variable_name.deref(), self.variable_by_id(*ent.1)))
+            } else {
+                None
+            }
+        })
     }
 }
 
-impl<T: Float> fmt::Debug for GraphRepr<T> {
+impl<T: Float> fmt::Debug for RawGraph<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let set = &*self.node_set.borrow();
         let mut buf = format!("graph size: {}\n", set.len());
@@ -160,7 +154,7 @@ where
     FN: FnOnce(&mut Graph<F>) -> R,
 {
     let env_handle = &mut VariableEnvironment::new();
-    let graph_internal = GraphRepr {
+    let graph_internal = RawGraph {
         node_set: RefCell::new(Vec::with_capacity(512)),
         variable2node: RefCell::new(FxHashMap::default()),
     };
@@ -188,7 +182,7 @@ where
 /// Use [run] or [VariableEnvironment::run] to instantiate this.
 pub struct Graph<'env, 'name, F: Float> {
     pub(crate) env_handle: &'env mut VariableEnvironment<'name, F>,
-    pub(crate) inner: GraphRepr<F>,
+    pub(crate) inner: RawGraph<F>,
 }
 
 impl<'env, 'name, F: Float> Graph<'env, 'name, F> {
@@ -209,15 +203,10 @@ impl<'env, 'name, F: Float> Graph<'env, 'name, F> {
     pub fn variable_by_id(&self, vid: VarArrayID) -> Tensor<F> {
         self.inner.variable_by_id(vid)
     }
-
-    #[inline]
-    pub(crate) fn inner(&self) -> &GraphRepr<F> {
-        &self.inner
-    }
 }
 
 impl<'env, 'name, F: Float> Deref for Graph<'env, 'name, F> {
-    type Target = GraphRepr<F>;
+    type Target = RawGraph<F>;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -225,26 +214,26 @@ impl<'env, 'name, F: Float> Deref for Graph<'env, 'name, F> {
     }
 }
 
-pub trait AsGraphRepr<F: Float> {
-    fn as_graph_repr(&self) -> &GraphRepr<F>;
+pub trait AsRawGraph<F: Float> {
+    fn as_graph_repr(&self) -> &RawGraph<F>;
 }
 
-impl<F: Float> AsGraphRepr<F> for GraphRepr<F> {
+impl<F: Float> AsRawGraph<F> for RawGraph<F> {
     #[inline]
-    fn as_graph_repr(&self) -> &GraphRepr<F> {
+    fn as_graph_repr(&self) -> &RawGraph<F> {
         self
     }
 }
 
-impl<F: Float> AsGraphRepr<F> for Graph<'_, '_, F> {
+impl<F: Float> AsRawGraph<F> for Graph<'_, '_, F> {
     #[inline]
-    fn as_graph_repr(&self) -> &GraphRepr<F> {
+    fn as_graph_repr(&self) -> &RawGraph<F> {
         &self.inner
     }
 }
 
 #[inline]
-pub(crate) fn assert_same_graph<F: Float>(a: &impl AsGraphRepr<F>, b: &impl AsGraphRepr<F>) {
+pub(crate) fn assert_same_graph<F: Float>(a: &impl AsRawGraph<F>, b: &impl AsRawGraph<F>) {
     assert_eq!(
         a.as_graph_repr() as *const _,
         b.as_graph_repr() as *const _,
@@ -263,4 +252,3 @@ fn test_mixed_graph() {
         });
     });
 }
-

@@ -1,9 +1,9 @@
 /// Some gemm kernel usages are ported from ndarray
 use crate::ndarray_ext::NdArray;
-#[cfg(feature = "blas")]
-use crate::tensor_ops::blas_ffi::*;
 use crate::same_type;
 use crate::tensor::Tensor;
+#[cfg(feature = "blas")]
+use crate::tensor_ops::blas_ffi::*;
 use crate::Float;
 use crate::NdArrayView;
 use crate::{op, NdArrayViewMut};
@@ -606,27 +606,22 @@ impl<T: Float> op::Op<T> for MatMul {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let s = ctx.graph();
         let gy = &ctx.output_grad();
         let opa = Tensor::builder(ctx.graph())
             .append_input(gy, false)
             .append_input(&ctx.input(1), false)
-            .build(
-                MatMul {
-                    transpose_a: false,
-                    transpose_b: true,
-                },
-            );
+            .build(MatMul {
+                transpose_a: false,
+                transpose_b: true,
+            });
 
         let opb = Tensor::builder(ctx.graph())
             .append_input(&ctx.input(0), false)
             .append_input(gy, false)
-            .build(
-                MatMul {
-                    transpose_a: true,
-                    transpose_b: false,
-                },
-            );
+            .build(MatMul {
+                transpose_a: true,
+                transpose_b: false,
+            });
 
         ctx.append_input_grad(Some(opa));
         ctx.append_input_grad(Some(opb));
@@ -704,22 +699,18 @@ impl<T: Float> op::Op<T> for BatchMatMul {
         let opa = Tensor::builder(ctx.graph())
             .append_input(gy, false)
             .append_input(&ctx.input(1), false)
-            .build(
-                BatchMatMul {
-                    transpose_a: false,
-                    transpose_b: true,
-                },
-            );
+            .build(BatchMatMul {
+                transpose_a: false,
+                transpose_b: true,
+            });
 
         let opb = Tensor::builder(ctx.graph())
             .append_input(&ctx.input(0), false)
             .append_input(gy, false)
-            .build(
-                BatchMatMul {
-                    transpose_a: true,
-                    transpose_b: false,
-                },
-            );
+            .build(BatchMatMul {
+                transpose_a: true,
+                transpose_b: false,
+            });
 
         ctx.append_input_grad(Some(opa));
         ctx.append_input_grad(Some(opb));

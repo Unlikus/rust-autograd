@@ -2,13 +2,13 @@ use crate::ndarray_ext;
 use crate::ndarray_ext::{NdArray, NdArrayView};
 use crate::op;
 use crate::same_type;
+use crate::tensor_ops::*;
 use crate::Float;
 use crate::Tensor;
 use ndarray;
 use rayon::prelude::*;
 use std::f32;
 use std::slice;
-use crate::tensor_ops::*;
 
 #[macro_use]
 pub mod conv2d;

@@ -5,8 +5,8 @@ use crate::ndarray_ext::NdArrayViewMut;
 use crate::ndarray_ext::{NdArray, NdArrayView};
 use crate::op;
 use crate::tensor::Tensor;
-use crate::Float;
 use crate::tensor_ops::*;
+use crate::Float;
 use std::iter::FromIterator;
 
 pub struct ExpandDims;
@@ -211,7 +211,6 @@ impl<T: Float> op::Op<T> for Reshape {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let scope = ctx.graph();
         let gy = ctx.output_grad();
         let x = ctx.input(0);
         let gx = Tensor::builder(ctx.graph())
@@ -288,7 +287,6 @@ impl<T: Float> op::Op<T> for IndexOp {
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let op = IndexOpGrad { index: self.index };
-        let scope = ctx.graph();
         let x = ctx.input(0);
         let gy = ctx.output_grad();
         let gx = Tensor::builder(ctx.graph())
@@ -370,7 +368,6 @@ impl<T: Float> op::Op<T> for Gather {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let scope = ctx.graph();
         let x = ctx.input(0);
         let x1 = ctx.input(1);
         let gy = ctx.output_grad();
@@ -460,8 +457,8 @@ impl<T: Float> op::Op<T> for GatherGrad {
 
 #[cfg(feature = "mkl")]
 pub(crate) fn inplace_add_impl<F: Float>(mut a: NdArrayViewMut<F>, b: &NdArrayView<F>) {
-    use crate::tensor_ops::blas_ffi::{vdAdd, vsAdd, MklInt};
     use crate::same_type;
+    use crate::tensor_ops::blas_ffi::{vdAdd, vsAdd, MklInt};
     unsafe {
         if same_type::<F, f32>() {
             vsAdd(
@@ -533,12 +530,10 @@ impl<T: Float> op::Op<T> for Clip<T> {
             .set_shape(&shape(gy))
             .append_input(&x0, false)
             .append_input(&gy, false)
-            .build(
-                ClipGrad {
-                    min: self.min,
-                    max: self.max,
-                },
-            );
+            .build(ClipGrad {
+                min: self.min,
+                max: self.max,
+            });
         ctx.append_input_grad(Some(gx));
     }
 }
@@ -597,12 +592,10 @@ impl<T: Float> op::Op<T> for Concat {
                 builder = builder.append_input(input, false);
             }
 
-            let gx = builder.build(
-                ConcatGrad {
-                    index: i,
-                    axis: self.axis,
-                },
-            );
+            let gx = builder.build(ConcatGrad {
+                index: i,
+                axis: self.axis,
+            });
             ctx.append_input_grad(Some(gx));
         }
     }
@@ -678,11 +671,7 @@ impl<T: Float> op::Op<T> for Tile {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        ctx.append_input_grad(Some(reduce_sum(
-            ctx.output_grad(),
-            &[self.axis],
-            true,
-        )));
+        ctx.append_input_grad(Some(reduce_sum(ctx.output_grad(), &[self.axis], true)));
     }
 }
 
@@ -835,9 +824,7 @@ impl<T: Float> op::Op<T> for Squeeze {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        ctx.append_input_grad(Some(
-            expand_dims(ctx.output_grad(), &ctx.input(1)),
-        ));
+        ctx.append_input_grad(Some(expand_dims(ctx.output_grad(), &ctx.input(1))));
         ctx.append_input_grad(None);
     }
 }

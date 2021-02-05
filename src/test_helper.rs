@@ -1,8 +1,8 @@
 //! Provides helper functions for testing.
 use crate::runtime::Feed;
 use crate::tensor::Tensor;
-use crate::{ndarray_ext, Float, Graph};
 use crate::tensor_ops::*;
+use crate::{ndarray_ext, Float, Graph};
 
 /// Checks the validity of `gradients` with finite difference trick.
 /// For this test only, `variables` must be *shared* variables.

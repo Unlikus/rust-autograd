@@ -1,11 +1,10 @@
 use crate::ndarray_ext;
 use crate::ndarray_ext::{NdArray, NdArrayView};
 use crate::op;
-use crate::tensor_ops;
 use crate::tensor::Tensor;
-use crate::Float;
-use crate::GraphRepr;
+use crate::tensor_ops;
 use crate::tensor_ops::*;
+use crate::Float;
 use ndarray;
 use std::f32;
 use std::mem;
@@ -224,12 +223,10 @@ impl<T: Float> op::Op<T> for ReduceMean {
             .append_input(&ctx.output_grad(), false)
             .append_input(&shape(x), false)
             .append_input(axes, false)
-            .build(
-                ReduceGradCommon {
-                    should_make_broadcast_dims: !self.keep_dims,
-                    sparse_axes: self.sparse_axes,
-                },
-            );
+            .build(ReduceGradCommon {
+                should_make_broadcast_dims: !self.keep_dims,
+                sparse_axes: self.sparse_axes,
+            });
 
         // Divide
         let reduction_sizes = gather_common(shape(x), axes, 0);
@@ -297,7 +294,6 @@ impl<T: Float> op::Op<T> for ReduceMin {
             &ctx.input(0),
             &ctx.input(1),
             &ctx.output(),
-            ctx.graph(),
             self.keep_dims,
             self.sparse_axes,
             ctx,
@@ -326,7 +322,6 @@ impl<T: Float> op::Op<T> for ReduceMax {
             &ctx.input(0),
             &ctx.input(1),
             &ctx.output(),
-            ctx.graph(),
             self.keep_dims,
             self.sparse_axes,
             ctx,
@@ -339,7 +334,6 @@ fn min_max_grad<'g, T: Float>(
     x1: &Tensor<'g, T>,
     x2: &Tensor<'g, T>,
     y: &Tensor<'g, T>,
-    s: &'g GraphRepr<T>,
     keep_dims: bool,
     sparse_axes: bool,
     ctx: &mut op::GradientContext<'g, T>,

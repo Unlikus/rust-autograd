@@ -1,10 +1,10 @@
 extern crate autograd as ag;
 extern crate ndarray;
 
+use ag::tensor_ops as T;
 use ag::{Graph, VariableEnvironment};
 use std::collections::HashMap;
 use std::ops::Deref;
-use ag::tensor_ops as T;
 
 type Tensor<'graph> = ag::Tensor<'graph, f32>;
 

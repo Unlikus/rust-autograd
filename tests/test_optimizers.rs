@@ -1,12 +1,10 @@
 extern crate autograd as ag;
 extern crate ndarray;
 use ag::optimizers::adam;
+use ag::tensor_ops as T;
 use ag::variable::NamespaceTrait;
 use ag::EvalError::OpError;
-use ag::{EvalError, NdArray};
 use ndarray::array;
-use std::env::var;
-use ag::tensor_ops as T;
 
 type Tensor<'g> = ag::Tensor<'g, f32>;
 
@@ -62,31 +60,4 @@ fn test_adam() {
         updates[0].as_ref().unwrap();
         updates[1].as_ref().unwrap();
     });
-}
-
-use autograd::ndarray::{Array, IxDyn};
-
-#[test]
-fn buggy() {
-    let mut ctx = ag::VariableEnvironment::<f32>::new();
-    let v = ctx.slot().set(ag::array_gen::zeros(&[]));
-
-    let adam = adam::Adam::default(
-        "my_unique_adam",
-        ctx.default_namespace().current_var_ids(),
-        &mut ctx, // mut env
-    );
-
-    ctx.run(|graph| {
-        let c = graph.convert_to_tensor(ag::array_gen::ones(&[2]));
-        let v = graph.variable_by_id(v);
-
-        let y = c * v;
-        let grads = T::grad(&[y], &[v]);
-
-        let updates = adam.update(&[v], &grads, graph);
-        for a in updates {
-            a.show().eval(&[], graph);
-        }
-    })
 }

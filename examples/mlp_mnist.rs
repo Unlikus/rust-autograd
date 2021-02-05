@@ -3,9 +3,9 @@ extern crate ndarray;
 
 use ag::optimizers::adam;
 use ag::rand::seq::SliceRandom;
+use ag::tensor_ops as T;
 use ag::variable::NamespaceTrait;
 use ag::{ndarray_ext as array, Graph};
-use ag::tensor_ops as T;
 use ndarray::s;
 use std::ops::Deref;
 use std::time::Instant;

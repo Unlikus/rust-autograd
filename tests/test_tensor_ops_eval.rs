@@ -1,9 +1,9 @@
 extern crate autograd as ag;
 extern crate ndarray;
 use self::ag::NdArray;
+use ag::tensor_ops as T;
 use ag::VariableEnvironment;
 use ndarray::array;
-use ag::tensor_ops as T;
 
 #[test]
 fn reduce_prod() {

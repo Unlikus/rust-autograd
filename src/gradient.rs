@@ -1,12 +1,12 @@
 //! Defining things related to gradient computation.
 use crate::op::{GradientContext, InputArray};
 use crate::tensor::Tensor;
+use crate::tensor_ops as T;
 use crate::Float;
 use crate::FxHashMap;
-use crate::GraphRepr;
+use crate::RawGraph;
 use std::cmp::Ordering;
 use std::collections::binary_heap::BinaryHeap;
-use crate::tensor_ops as T;
 
 // Info of gradient of a `Tensor`.
 struct GradInfo<'graph, F: Float> {
@@ -35,7 +35,7 @@ impl<'g, F: Float> GradInfo<'g, F> {
     }
 
     #[inline]
-    fn accumulate_then_get(&mut self, g: &'g GraphRepr<F>) -> Tensor<'g, F> {
+    fn accumulate_then_get(&mut self) -> Tensor<'g, F> {
         if let Some(acc) = self.accumulated_grad {
             return acc;
         }
@@ -50,11 +50,11 @@ impl<'g, F: Float> GradInfo<'g, F> {
     }
 
     #[inline]
-    fn get_grad(&mut self, g: &'g GraphRepr<F>) -> Tensor<'g, F> {
+    fn get_grad(&mut self, g: &'g RawGraph<F>) -> Tensor<'g, F> {
         if let Some(def) = self.default_grad {
             g.tensor(def)
         } else {
-            self.accumulate_then_get(g)
+            self.accumulate_then_get()
         }
     }
 }
@@ -81,7 +81,7 @@ fn is_wrt(node: usize, wrt: &[usize]) -> bool {
 //   1. Record all nodes that are reachable from `ys` into `ret`.
 //   2. Mark the path between `ys` and `xs` as `has_gradient`.
 fn get_between_nodes<'t, 'g, F: Float>(
-    g: &'g GraphRepr<F>,
+    g: &'g RawGraph<F>,
     ys: &[usize],
     wrt: &[usize],
 ) -> FxHashMap<usize, GradInfo<'g, F>> {
@@ -137,7 +137,7 @@ pub(crate) fn symbolic_gradients<'t, 'g, F: Float>(
     ys: &[usize],
     wrt: &[usize],
     gys: &[usize],
-    g: &'g GraphRepr<F>,
+    g: &'g RawGraph<F>,
 ) -> Vec<Tensor<'g, F>> {
     assert_eq!(ys.len(), gys.len(), "`ys.len()` must match `gys.len()`");
 
@@ -201,7 +201,7 @@ pub(crate) fn symbolic_gradients<'t, 'g, F: Float>(
             info.default_grad.is_none(),
             "Can't differentiate with objective itself"
         );
-        ret.push(info.accumulate_then_get(g));
+        ret.push(info.accumulate_then_get());
     }
     ret
 }

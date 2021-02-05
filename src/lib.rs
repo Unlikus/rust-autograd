@@ -162,9 +162,9 @@ pub extern crate rand;
 extern crate rand_distr;
 extern crate rayon;
 extern crate rustc_hash;
+extern crate serde_json;
 pub(crate) extern crate smallvec;
 extern crate uuid;
-extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 extern crate approx;
@@ -174,12 +174,12 @@ pub(crate) mod graph;
 mod hook;
 pub mod ndarray_ext;
 pub mod op;
-pub mod tensor_ops;
-pub mod variable;
 pub mod optimizers;
 mod runtime;
 pub mod tensor;
+pub mod tensor_ops;
 pub mod test_helper;
+pub mod variable;
 pub use variable::VariableEnvironment;
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -264,8 +264,8 @@ pub use crate::tensor::Tensor;
 
 pub(crate) use crate::ndarray_ext::ArrRepr;
 
-pub use crate::graph::{run, with, Graph, GraphRepr};
-use serde::{Serialize, Deserialize};
+pub use crate::graph::{run, with, Graph, RawGraph};
+use serde::{Deserialize, Serialize};
 
 /// Error during tensor's evaluation.
 #[derive(Debug, PartialEq)]

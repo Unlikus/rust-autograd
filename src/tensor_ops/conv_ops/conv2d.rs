@@ -1,7 +1,7 @@
 use super::*;
+use crate::tensor_ops::*;
 use ndarray::IxDyn;
 use std::slice;
-use crate::tensor_ops::*;
 
 pub struct Conv2D {
     pub pad: usize,
@@ -554,7 +554,6 @@ impl<T: Float> crate::op::Op<T> for Conv2D {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let s = ctx.graph();
         let gy = ctx.output_grad();
         let y = ctx.output();
         let x = ctx.input(0);
@@ -563,13 +562,11 @@ impl<T: Float> crate::op::Op<T> for Conv2D {
         let gx = Tensor::builder(ctx.graph())
             .append_input(&gy, false)
             .append_input(&w, false)
-            .build(
-                super::conv2d_transpose::Conv2DTranspose {
-                    pad: self.pad,
-                    stride: self.stride,
-                    dilation: self.dilation,
-                },
-            );
+            .build(super::conv2d_transpose::Conv2DTranspose {
+                pad: self.pad,
+                stride: self.stride,
+                dilation: self.dilation,
+            });
 
         let cols = nth_tensor(y, 1);
         let gw = Tensor::builder(ctx.graph())
@@ -578,13 +575,11 @@ impl<T: Float> crate::op::Op<T> for Conv2D {
             .append_input(&w, false)
             .append_backprop_input(&x)
             .append_backprop_input(&gy)
-            .build(
-                Conv2DFilterGrad {
-                    pad: self.pad,
-                    stride: self.stride,
-                    dilation: self.dilation,
-                },
-            );
+            .build(Conv2DFilterGrad {
+                pad: self.pad,
+                stride: self.stride,
+                dilation: self.dilation,
+            });
 
         ctx.append_input_grad(Some(gx));
         ctx.append_input_grad(Some(gw));
@@ -606,18 +601,15 @@ impl<T: Float> crate::op::Op<T> for Conv2DWithCols {
         let w = ctx.input(1);
         let y = ctx.output();
         let gy = ctx.output_grad();
-        let s = ctx.graph();
 
         let gx = Tensor::builder(ctx.graph())
             .append_input(&gy, false)
             .append_input(&w, false)
-            .build(
-                super::conv2d_transpose::Conv2DTranspose {
-                    pad: self.pad,
-                    stride: self.stride,
-                    dilation: self.dilation,
-                },
-            );
+            .build(super::conv2d_transpose::Conv2DTranspose {
+                pad: self.pad,
+                stride: self.stride,
+                dilation: self.dilation,
+            });
 
         let gw = Tensor::builder(ctx.graph())
             .append_input(&cols, false)
@@ -625,13 +617,11 @@ impl<T: Float> crate::op::Op<T> for Conv2DWithCols {
             .append_input(&w, false)
             .append_backprop_input(&y.get_backprop_input(0))
             .append_backprop_input(&gy)
-            .build(
-                Conv2DFilterGrad {
-                    pad: self.pad,
-                    stride: self.stride,
-                    dilation: self.dilation,
-                },
-            );
+            .build(Conv2DFilterGrad {
+                pad: self.pad,
+                stride: self.stride,
+                dilation: self.dilation,
+            });
 
         ctx.append_input_grad(Some(gx));
         ctx.append_input_grad(Some(gw));
@@ -716,7 +706,7 @@ fn conv2d_filter_grad_impl<F: Float>(
                                 m,
                                 k,
                                 n,
-                                1.,                                         // alpha
+                                1.,                                             // alpha
                                 gy_ptr.add(i * size_per_batch_g) as *const $ty, // a
                                 rsa as isize,
                                 csa as isize,
@@ -758,32 +748,27 @@ impl<T: Float> crate::op::Op<T> for Conv2DFilterGrad {
         let gy = ctx.input(1); // For example, gradient of output of Conv2D.
         let ggw = ctx.output_grad();
         let y = ctx.output();
-        let s = ctx.graph();
 
         // grad grad
         let gx = Tensor::builder(ctx.graph())
             .append_input(&gy, false)
             .append_input(&ggw, false)
-            .build(
-                super::conv2d_transpose::Conv2DTranspose {
-                    pad: self.pad,
-                    stride: self.stride,
-                    dilation: self.dilation,
-                },
-            );
+            .build(super::conv2d_transpose::Conv2DTranspose {
+                pad: self.pad,
+                stride: self.stride,
+                dilation: self.dilation,
+            });
 
         let ggy = Tensor::builder(ctx.graph())
             .append_input(&cols, false)
             .append_input(&ggw, false)
             .append_backprop_input(&y.get_backprop_input(0))
             .append_backprop_input(&ggw)
-            .build(
-                Conv2DWithCols {
-                    pad: self.pad,
-                    stride: self.stride,
-                    dilation: self.dilation,
-                },
-            );
+            .build(Conv2DWithCols {
+                pad: self.pad,
+                stride: self.stride,
+                dilation: self.dilation,
+            });
 
         ctx.append_input_grad(Some(gx));
         ctx.append_input_grad(Some(ggy));

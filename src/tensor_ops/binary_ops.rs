@@ -1,9 +1,9 @@
 use crate::ndarray_ext::{NdArray, NdArrayView};
 use crate::op;
 use crate::tensor::Tensor;
-use crate::Float;
-use crate::GraphRepr;
 use crate::tensor_ops::*;
+use crate::Float;
+use crate::RawGraph;
 /// Implement +, -, *, / operators for Tensor
 /// +=, -=, *=, /= are provided as methods of c.inplace_*.
 /// *=, /= don't propagate gradients.
@@ -180,7 +180,7 @@ impl<T: Float> op::Op<T> for SubOp {
         } else if shape0 == shape1 {
             #[cfg(feature = "mkl")]
             {
-                use crate::{tensor_ops::blas_ffi::*, same_type};
+                use crate::{same_type, tensor_ops::blas_ffi::*};
                 bin_op_same_shape!(vsSub, vdSub, -, x0, x1)
             }
             #[cfg(not(feature = "mkl"))]
@@ -258,7 +258,7 @@ impl<T: Float> op::Op<T> for DivOp {
         } else if shape0 == shape1 {
             #[cfg(feature = "mkl")]
             {
-                use crate::{tensor_ops::blas_ffi::*, same_type};
+                use crate::{same_type, tensor_ops::blas_ffi::*};
                 bin_op_same_shape!(vsDiv, vdDiv, /, x0, x1)
             }
             #[cfg(not(feature = "mkl"))]
@@ -294,7 +294,7 @@ impl<T: Float> op::Op<T> for DivOp {
 fn maybe_reduce<'g, T: Float>(
     target_shape: &Tensor<'g, T>,
     x: &Tensor<'g, T>,
-    graph: &'g GraphRepr<T>,
+    graph: &'g RawGraph<T>,
 ) -> Tensor<'g, T> {
     Tensor::builder(graph)
         .append_input(x, false)

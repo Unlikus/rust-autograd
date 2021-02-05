@@ -1,15 +1,14 @@
 use crate::ndarray_ext::{NdArray, NdArrayView};
 use crate::op;
 #[cfg(all(feature = "blas", feature = "intel-mkl"))]
-use crate::tensor_ops::blas_ffi::*;
-#[cfg(all(feature = "blas", feature = "intel-mkl"))]
 use crate::same_type;
 use crate::tensor::Tensor;
+#[cfg(all(feature = "blas", feature = "intel-mkl"))]
+use crate::tensor_ops::blas_ffi::*;
+use crate::tensor_ops::*;
 use crate::Float;
-use crate::GraphRepr;
 use ndarray;
 use ndarray::Zip;
-use crate::tensor_ops::*;
 
 pub struct Sin;
 pub struct Cos;
@@ -166,7 +165,6 @@ macro_rules! impl_cmp_op {
                     ctx.input(0),
                     ctx.input(1),
                     ctx.output(),
-                    ctx.graph(),
                     ctx,
                 );
             }
@@ -189,7 +187,6 @@ fn none_grad<'g, T: Float>(
     _: Tensor<'g, T>,
     _: Tensor<'g, T>,
     _: Tensor<'g, T>,
-    _: &'g GraphRepr<T>,
     ctx: &mut crate::op::GradientContext<T>,
 ) {
     ctx.append_input_grad(None);
@@ -201,7 +198,6 @@ fn min_max_grad<'g, T: Float>(
     x1: Tensor<'g, T>,
     x2: Tensor<'g, T>,
     y: Tensor<'g, T>,
-    c: &'g GraphRepr<T>,
     ctx: &mut crate::op::GradientContext<'g, T>,
 ) {
     let selected_a = equal(x1, y);
@@ -343,9 +339,7 @@ impl<T: Float> op::Op<T> for Inv {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        ctx.append_input_grad(Some(
-            neg(&square(ctx.output())) * ctx.output_grad(),
-        ));
+        ctx.append_input_grad(Some(neg(&square(ctx.output())) * ctx.output_grad()));
     }
 }
 
@@ -461,11 +455,9 @@ impl<T: Float> op::Op<T> for Transpose {
             .append_input(&ctx.output_grad(), false)
             .append_input(&ctx.input(1), false)
             .set_shape(&shape(&ctx.input(0)))
-            .build(
-                Transpose {
-                    invert_axes: !self.invert_axes,
-                },
-            );
+            .build(Transpose {
+                invert_axes: !self.invert_axes,
+            });
         ctx.append_input_grad(Some(gx));
         ctx.append_input_grad(None);
     }
@@ -630,8 +622,7 @@ impl<T: Float> op::Op<T> for Pow<T> {
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let x = ctx.input(0);
-        let gx =
-            ctx.output_grad() * ctx.graph().scalar(self.a) * pow(x, self.a - T::one());
+        let gx = ctx.output_grad() * ctx.graph().scalar(self.a) * pow(x, self.a - T::one());
         ctx.append_input_grad(Some(gx))
     }
 }
@@ -794,7 +785,6 @@ impl<T: Float> op::Op<T> for Atanh {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let g = ctx.graph();
         let x = ctx.input(0);
         let y = inv(1. - square(x));
         ctx.append_input_grad(Some(y * ctx.output_grad()));
@@ -1002,7 +992,6 @@ impl<T: Float> op::Op<T> for Cos {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let g = ctx.graph();
         ctx.append_input_grad(Some(neg(&(sin(ctx.input(0)) * ctx.output_grad()))));
     }
 }

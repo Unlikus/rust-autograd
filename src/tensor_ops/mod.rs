@@ -3,7 +3,7 @@ use ndarray;
 
 use crate::ndarray_ext::{ArrayRng, NdArray};
 use crate::tensor::{AsTensor, Tensor};
-use crate::{Float, Graph, GraphRepr};
+use crate::{Float, RawGraph};
 use rand::Rng;
 
 mod activation_ops;
@@ -173,7 +173,6 @@ where
     B: AsRef<Tensor<'graph, F>> + Copy,
 {
     let y = y_.as_ref();
-    let g = y.graph();
     // let xs: Vec<_> = xs_.iter().map(|x| x.as_ref().inner()).collect();
     let mut vec_vec = Vec::with_capacity(objective_len);
     // let gy = self.scalar(F::one()).inner();
@@ -207,7 +206,6 @@ where
     B: AsRef<Tensor<'graph, F>> + Copy,
     C: AsRef<Tensor<'graph, F>> + Copy,
 {
-    let g = ys[0].as_ref().graph();
     let grads = grad(ys, xs);
     let products = grads
         .into_iter()
@@ -233,7 +231,7 @@ where
         .build(gradient_ops::StopGradient)
 }
 
-impl<'graph, F: Float> GraphRepr<F> {
+impl<'graph, F: Float> RawGraph<F> {
     /// Creates a placeholder tensor.
     ///
     /// Behaves like TensorFlow 1.x 's placeholder.
@@ -265,7 +263,7 @@ impl<'graph, F: Float> GraphRepr<F> {
                             .map(|&x| F::from(x).unwrap())
                             .collect::<Vec<_>>(),
                     )
-                        .unwrap(),
+                    .unwrap(),
                 ),
             )
         } else {
@@ -289,13 +287,13 @@ impl<'graph, F: Float> GraphRepr<F> {
 /// });
 /// ```
 pub fn shape<'graph, A, F: Float>(x: A) -> Tensor<'graph, F>
-    where
-        A: AsRef<Tensor<'graph, F>> + Copy,
+where
+    A: AsRef<Tensor<'graph, F>> + Copy,
 {
     let x = x.as_ref();
     let g = x.graph();
     if let Some(id) = x.inner().shape {
-        return g.tensor(id)
+        return g.tensor(id);
     }
     Tensor::builder(g)
         .append_input(x.as_ref(), false)
@@ -541,7 +539,11 @@ where
 }
 
 #[inline]
-fn infer_bin_op_shape<'graph, A, B, F: Float>(g: &'graph GraphRepr<F>, shape_a: A, shape_b: B) -> Tensor<'graph, F>
+fn infer_bin_op_shape<'graph, A, B, F: Float>(
+    g: &'graph RawGraph<F>,
+    shape_a: A,
+    shape_b: B,
+) -> Tensor<'graph, F>
 where
     A: AsRef<Tensor<'graph, F>> + Copy,
     B: AsRef<Tensor<'graph, F>> + Copy,
@@ -903,9 +905,7 @@ where
     let x = x.as_ref();
     let g = x.graph();
     let op = reduction_ops::ArgMin { axis, keep_dim };
-    Tensor::builder(g)
-        .append_input(x.as_ref(), false)
-        .build(op)
+    Tensor::builder(g).append_input(x.as_ref(), false).build(op)
 }
 
 /// Takes argmax along specified axis.
@@ -931,9 +931,7 @@ where
     let x = x.as_ref();
     let g = x.graph();
     let op = reduction_ops::ArgMax { axis, keep_dim };
-    Tensor::builder(g)
-        .append_input(x.as_ref(), false)
-        .build(op)
+    Tensor::builder(g).append_input(x.as_ref(), false).build(op)
 }
 
 /// Expands the shape (inserts axes).
@@ -1017,9 +1015,7 @@ where
     let x = x.as_ref();
     let g = x.graph();
     let op = array_ops::Tile { axis, num };
-    Tensor::builder(g)
-        .append_input(x.as_ref(), false)
-        .build(op)
+    Tensor::builder(g).append_input(x.as_ref(), false).build(op)
 }
 
 /// Limits all elements of `x` so as to be within `[min, max]`
@@ -1042,9 +1038,7 @@ where
     let x = x.as_ref();
     let g = x.graph();
     let op = array_ops::Clip { min, max };
-    Tensor::builder(g)
-        .append_input(x.as_ref(), false)
-        .build(op)
+    Tensor::builder(g).append_input(x.as_ref(), false).build(op)
 }
 
 /// Takes max along specified axes.
@@ -1256,11 +1250,7 @@ where
     AT: AsTensor<'graph, F>,
 {
     let x = x.as_ref();
-    reduce_mean(
-        square(x - reduce_mean(x, axes, true)),
-        axes,
-        keep_dims,
-    )
+    reduce_mean(square(x - reduce_mean(x, axes, true)), axes, keep_dims)
 }
 
 /// Reshapes the input tensor without copy.
@@ -1655,8 +1645,8 @@ where
 ///
 /// See <http://web.stanford.edu/~awni/papers/relu_hybrid_icml2013_final.pdf>.
 pub fn leaky_relu<'graph, A, F: Float>(x: A, alpha: F) -> Tensor<'graph, F>
-    where
-        A: AsRef<Tensor<'graph, F>> + Copy,
+where
+    A: AsRef<Tensor<'graph, F>> + Copy,
 {
     let x = x.as_ref();
     let g = x.graph();
@@ -1665,7 +1655,7 @@ pub fn leaky_relu<'graph, A, F: Float>(x: A, alpha: F) -> Tensor<'graph, F>
 
 /// Elementwise softplus.
 pub fn softplus<'graph, A, F: Float>(x: A) -> Tensor<'graph, F>
-    where
+where
     A: AsRef<Tensor<'graph, F>> + Copy,
 {
     let x = x.as_ref();
@@ -1689,9 +1679,7 @@ where
         axis,
         keep_dims: keep_dim,
     };
-    Tensor::builder(g)
-        .append_input(x.as_ref(), false)
-        .build(op)
+    Tensor::builder(g).append_input(x.as_ref(), false).build(op)
 }
 
 /// Log softmax function.
@@ -1721,9 +1709,7 @@ where
     let x = x.as_ref();
     let g = x.graph();
     let op = activation_ops::Softmax { axis };
-    Tensor::builder(g)
-        .append_input(x.as_ref(), false)
-        .build(op)
+    Tensor::builder(g).append_input(x.as_ref(), false).build(op)
 }
 
 /// Computes `binary_cross_entropy(sigmoid(y), t)`.
@@ -1832,12 +1818,10 @@ where
     Tensor::builder(g)
         .append_input(a.as_ref(), false)
         .append_input(b.as_ref(), false)
-        .build(
-            dot_ops::MatMul {
-                transpose_a: false,
-                transpose_b: false,
-            },
-        )
+        .build(dot_ops::MatMul {
+            transpose_a: false,
+            transpose_b: false,
+        })
 }
 
 /// Computes tensor-dot-product (tensor contraction) along specified axes.
@@ -2081,13 +2065,15 @@ where
             start_index += size;
         }
         let end_index = start_index + sizes[i];
-        ret.push(Tensor::builder(g).append_input(x.as_ref(), false).build(
-            array_ops::Split {
-                start_index: start_index as isize,
-                end_index: end_index as isize,
-                axis,
-            },
-        ));
+        ret.push(
+            Tensor::builder(g)
+                .append_input(x.as_ref(), false)
+                .build(array_ops::Split {
+                    start_index: start_index as isize,
+                    end_index: end_index as isize,
+                    axis,
+                }),
+        );
     }
     ret
 }
@@ -2316,15 +2302,15 @@ where
 /// });
 /// ```
 pub fn batch_norm<'graph, A, B, C, F: Float>(x: A, scale: B, shift: C) -> Tensor<'graph, F>
-    where
-        A: AsRef<Tensor<'graph, F>> + Copy,
-        B: AsRef<Tensor<'graph, F>> + Copy,
-        C: AsRef<Tensor<'graph, F>> + Copy,
+where
+    A: AsRef<Tensor<'graph, F>> + Copy,
+    B: AsRef<Tensor<'graph, F>> + Copy,
+    C: AsRef<Tensor<'graph, F>> + Copy,
 {
     normalize(x, &[0]) * scale.as_ref() + shift.as_ref()
 }
 
-impl<'graph, F: Float> GraphRepr<F> {
+impl<'graph, F: Float> RawGraph<F> {
     /// Converts an `ndarray::Array` to a `ag::Tensor`.
     ///
     /// ```
@@ -2338,15 +2324,13 @@ impl<'graph, F: Float> GraphRepr<F> {
     /// });
     /// ```
     pub fn convert_to_tensor<D>(&'graph self, arr: ndarray::Array<F, D>) -> Tensor<'graph, F>
-        where
-            D: ndarray::Dimension,
+    where
+        D: ndarray::Dimension,
     {
         let arr = arr.into_dyn();
-        let shape = Tensor::builder(self).build(
-            const_gen_ops::ConvertToTensor {
-                arr: crate::ndarray_ext::shape_of(&arr),
-            },
-        );
+        let shape = Tensor::builder(self).build(const_gen_ops::ConvertToTensor {
+            arr: crate::ndarray_ext::shape_of(&arr),
+        });
         Tensor::builder(self)
             .set_shape(shape.as_ref())
             .build(const_gen_ops::ConvertToTensor { arr })
@@ -2372,8 +2356,8 @@ impl<'graph, F: Float> GraphRepr<F> {
 
     /// Outputs values sampled from the normal distribution.
     pub fn random_normal<A>(&'graph self, shape: &A, mean: f64, stddev: f64) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         self.random_normal_rng(Default::default(), shape, mean, stddev)
     }
@@ -2388,8 +2372,8 @@ impl<'graph, F: Float> GraphRepr<F> {
         mean: f64,
         stddev: f64,
     ) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         let t = shape.as_tensor(self);
         Tensor::builder(self)
@@ -2400,8 +2384,8 @@ impl<'graph, F: Float> GraphRepr<F> {
 
     /// Outputs values sampled from the uniform distribution.
     pub fn random_uniform<A>(&'graph self, shape: &A, min: f64, max: f64) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         self.random_uniform_rng(Default::default(), shape, min, max)
     }
@@ -2416,8 +2400,8 @@ impl<'graph, F: Float> GraphRepr<F> {
         min: f64,
         max: f64,
     ) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         let t = shape.as_tensor(self);
         Tensor::builder(self)
@@ -2428,8 +2412,8 @@ impl<'graph, F: Float> GraphRepr<F> {
 
     /// Outputs values sampled from the standard normal distribution.
     pub fn standard_normal<A>(&'graph self, shape: &A) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         self.standard_normal_rng(Default::default(), shape)
     }
@@ -2442,8 +2426,8 @@ impl<'graph, F: Float> GraphRepr<F> {
         arr_rng: ArrayRng<F, R>,
         shape: &A,
     ) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         let shape = shape;
         let t = shape.as_tensor(self);
@@ -2455,8 +2439,8 @@ impl<'graph, F: Float> GraphRepr<F> {
 
     /// Outputs values sampled from the standard uniform distribution.
     pub fn standard_uniform<A>(&'graph self, shape: &A) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         self.standard_uniform_rng(Default::default(), shape)
     }
@@ -2469,8 +2453,8 @@ impl<'graph, F: Float> GraphRepr<F> {
         arr_rng: ArrayRng<F, R>,
         shape: &A,
     ) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         let t = shape.as_tensor(self);
         Tensor::builder(self)
@@ -2481,8 +2465,8 @@ impl<'graph, F: Float> GraphRepr<F> {
 
     /// Outputs values sampled from the bernoulli distribution.
     pub fn bernoulli<A>(&'graph self, shape: &A, p: f64) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         self.bernoulli_rng(Default::default(), shape, p)
     }
@@ -2496,8 +2480,8 @@ impl<'graph, F: Float> GraphRepr<F> {
         shape: &A,
         p: f64,
     ) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         let t = shape.as_tensor(self);
         Tensor::builder(self)
@@ -2508,8 +2492,8 @@ impl<'graph, F: Float> GraphRepr<F> {
 
     /// Outputs values sampled from the exponential distribution.
     pub fn random_exp<A>(&'graph self, shape: &A, lambda: f64) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         self.random_exp_rng(Default::default(), shape, lambda)
     }
@@ -2523,8 +2507,8 @@ impl<'graph, F: Float> GraphRepr<F> {
         shape: &A,
         lambda: f64,
     ) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         let t = shape.as_tensor(self);
         Tensor::builder(self)
@@ -2540,8 +2524,8 @@ impl<'graph, F: Float> GraphRepr<F> {
         shape_param: f64,
         scale: f64,
     ) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         self.random_gamma_rng(Default::default(), shape, shape_param, scale)
     }
@@ -2556,8 +2540,8 @@ impl<'graph, F: Float> GraphRepr<F> {
         shape_param: f64,
         scale: f64,
     ) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         let t = shape.as_tensor(self);
         Tensor::builder(self)
@@ -2568,8 +2552,8 @@ impl<'graph, F: Float> GraphRepr<F> {
 
     /// Outputs values sampled from the log-normal distribution.
     pub fn log_normal<A>(&'graph self, shape: &A, mean: f64, stddev: f64) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         self.log_normal_rng(Default::default(), shape, mean, stddev)
     }
@@ -2584,8 +2568,8 @@ impl<'graph, F: Float> GraphRepr<F> {
         mean: f64,
         stddev: f64,
     ) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         let t = shape.as_tensor(self);
         Tensor::builder(self)
@@ -2606,8 +2590,8 @@ impl<'graph, F: Float> GraphRepr<F> {
     /// });
     /// ```
     pub fn zeros<A>(&'graph self, shape: &A) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         Tensor::builder(self)
             .append_input(&shape.as_tensor(self), false)
@@ -2626,8 +2610,8 @@ impl<'graph, F: Float> GraphRepr<F> {
     /// });
     /// ```
     pub fn ones<A>(&'graph self, shape: &A) -> Tensor<'graph, F>
-        where
-            A: AsTensor<'graph, F>,
+    where
+        A: AsTensor<'graph, F>,
     {
         Tensor::builder(self)
             .append_input(&shape.as_tensor(self), false)
@@ -2658,13 +2642,11 @@ where
     Tensor::builder(g)
         .append_input(x.as_ref(), false)
         .append_input(w.as_ref(), false)
-        .build(
-            conv_ops::conv2d::Conv2D {
-                pad,
-                stride,
-                dilation: 1,
-            },
-        )
+        .build(conv_ops::conv2d::Conv2D {
+            pad,
+            stride,
+            dilation: 1,
+        })
 }
 
 /// 2D convolution with dilation.
@@ -2696,13 +2678,11 @@ where
     Tensor::builder(g)
         .append_input(x.as_ref(), false)
         .append_input(w.as_ref(), false)
-        .build(
-            conv_ops::conv2d::Conv2D {
-                pad,
-                stride,
-                dilation: dilate,
-            },
-        )
+        .build(conv_ops::conv2d::Conv2D {
+            pad,
+            stride,
+            dilation: dilate,
+        })
 }
 
 /// 2D transposed convolution.
@@ -2733,13 +2713,11 @@ where
     Tensor::builder(g)
         .append_input(x.as_ref(), false)
         .append_input(w.as_ref(), false)
-        .build(
-            conv_ops::conv2d_transpose::Conv2DTranspose {
-                pad,
-                stride,
-                dilation: 1,
-            },
-        )
+        .build(conv_ops::conv2d_transpose::Conv2DTranspose {
+            pad,
+            stride,
+            dilation: 1,
+        })
 }
 
 /// 2D transposed convolution with dilation.
@@ -2771,13 +2749,11 @@ where
     Tensor::builder(g)
         .append_input(x.as_ref(), false)
         .append_input(w.as_ref(), false)
-        .build(
-            conv_ops::conv2d_transpose::Conv2DTranspose {
-                pad,
-                stride,
-                dilation: dilate,
-            },
-        )
+        .build(conv_ops::conv2d_transpose::Conv2DTranspose {
+            pad,
+            stride,
+            dilation: dilate,
+        })
 }
 
 /// 2D max pooling.
@@ -2803,11 +2779,11 @@ where
 {
     let x = x.as_ref();
     let g = x.graph();
-    Tensor::builder(g).append_input(x.as_ref(), false).build(
-        conv_ops::max_pool2d::MaxPool2D {
+    Tensor::builder(g)
+        .append_input(x.as_ref(), false)
+        .build(conv_ops::max_pool2d::MaxPool2D {
             pad,
             stride,
             size: pool_size,
-        },
-    )
+        })
 }

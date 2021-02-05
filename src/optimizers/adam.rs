@@ -1,6 +1,6 @@
 //! Adam optimizer
-use crate::tensor_ops::gradient_descent_ops::adam;
 use crate::tensor::Tensor;
+use crate::tensor_ops::gradient_descent_ops::adam;
 use crate::variable::VarArrayID;
 use crate::{Float, Graph, VariableEnvironment};
 
@@ -52,7 +52,7 @@ impl<'t, 'g, 's, F: Float> Adam<F> {
     /// Instantiates `Adam` optimizer with the recommended parameters in the original paper.
     pub fn default(
         unique_namespace_id: &'static str,
-        var_id_list: impl IntoIterator<Item =VarArrayID>,
+        var_id_list: impl IntoIterator<Item = VarArrayID>,
         env_handle: &mut VariableEnvironment<F>,
     ) -> Adam<F> {
         let static_params = StaticParams {
@@ -61,18 +61,13 @@ impl<'t, 'g, 's, F: Float> Adam<F> {
             b1: F::from(0.9).unwrap(),
             b2: F::from(0.999).unwrap(),
         };
-        Adam::new(
-            static_params,
-            var_id_list,
-            env_handle,
-            unique_namespace_id,
-        )
+        Adam::new(static_params, var_id_list, env_handle, unique_namespace_id)
     }
 
     /// Instantiates `Adam` optimizer with given params.
     pub fn new(
         static_params: StaticParams<F>,
-        var_id_list: impl IntoIterator<Item =VarArrayID>,
+        var_id_list: impl IntoIterator<Item = VarArrayID>,
         env: &mut VariableEnvironment<F>,
         adam_namespace_id: &'static str,
     ) -> Adam<F> {
@@ -81,7 +76,10 @@ impl<'t, 'g, 's, F: Float> Adam<F> {
             let v_name = format!("{}v", vid);
             let t_name = format!("{}t", vid);
             let (m, v, t) = {
-                let target_var = env.get_array_by_id(vid).expect("variable array not found").borrow();
+                let target_var = env
+                    .get_array_by_id(vid)
+                    .expect("variable array not found")
+                    .borrow();
                 let var_shape = target_var.shape();
                 (
                     crate::ndarray_ext::zeros(var_shape),
@@ -126,11 +124,9 @@ impl<'t, 'g, 's, F: Float> Adam<F> {
                     .append_input(&m, true)
                     .append_input(&v, true)
                     .append_input(&t, true)
-                    .build(
-                        adam::AdamOp {
-                            static_params: self.static_params.clone(),
-                        },
-                    ),
+                    .build(adam::AdamOp {
+                        static_params: self.static_params.clone(),
+                    }),
             );
         }
         ret

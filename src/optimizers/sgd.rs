@@ -1,6 +1,6 @@
 //! Stochastic gradient descent optimizer
-use crate::tensor_ops::gradient_descent_ops::sgd;
 use crate::tensor::Tensor;
+use crate::tensor_ops::gradient_descent_ops::sgd;
 use crate::{Float, Graph};
 
 /// Vanilla SGD optimizer
