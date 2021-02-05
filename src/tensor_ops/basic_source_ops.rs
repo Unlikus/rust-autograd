@@ -21,3 +21,7 @@ macro_rules! impl_op {
 impl_op!(Variable);
 impl_op!(Const);
 impl_op!(Placeholder);
+
+pub fn tanh() -> usize{
+    1
+}

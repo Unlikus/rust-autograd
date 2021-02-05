@@ -124,7 +124,7 @@ pub(crate) fn scalar_shape<T: Float>() -> NdArray<T> {
 
 #[inline]
 pub(crate) fn is_scalar_shape(shape: &[usize]) -> bool {
-    shape == [] || shape == [0]
+    shape.len() == 0 || shape == [0]
 }
 
 #[inline]

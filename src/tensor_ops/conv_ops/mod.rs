@@ -8,6 +8,7 @@ use ndarray;
 use rayon::prelude::*;
 use std::f32;
 use std::slice;
+use crate::tensor_ops::*;
 
 #[macro_use]
 pub mod conv2d;
@@ -15,7 +16,7 @@ pub mod conv2d;
 pub mod conv2d_transpose;
 pub mod max_pool2d;
 #[cfg(feature = "blas")]
-use crate::ops::blas_ffi::*;
+use crate::tensor_ops::blas_ffi::*;
 #[cfg(feature = "blas")]
 use cblas_sys::{
     CBLAS_LAYOUT::CblasRowMajor,

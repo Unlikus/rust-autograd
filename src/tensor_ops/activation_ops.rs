@@ -1,12 +1,14 @@
 use crate::ndarray_ext::{NdArray, NdArrayView};
 use crate::op;
 #[cfg(feature = "mkl")]
-use crate::ops::blas_ffi::*;
+use crate::tensor_ops::blas_ffi::*;
 #[cfg(feature = "mkl")]
 use crate::same_type;
 use crate::tensor::Tensor;
 use crate::Float;
 use ndarray;
+use crate::tensor_ops::*;
+
 pub struct ELU<T: Float> {
     pub alpha: T,
 }
@@ -78,7 +80,7 @@ pub fn softmax_impl<T: Float>(x: &NdArrayView<T>, axis: isize) -> NdArray<T> {
     let mut tmp = x - max;
     #[cfg(feature = "mkl")]
     {
-        crate::ops::math_ops::fast_inplace_exp_impl(&mut tmp);
+        crate::tensor_ops::math_ops::fast_inplace_exp_impl(&mut tmp);
     }
     #[cfg(not(feature = "mkl"))]
     {
@@ -104,7 +106,7 @@ impl<T: Float> op::Op<T> for Softmax {
         let s = ctx.graph();
         let y = ctx.output();
         let gy = ctx.output_grad();
-        let sum = s.reduce_sum(y * gy, &[self.axis], true);
+        let sum = reduce_sum(y * gy, &[self.axis], true);
         ctx.append_input_grad(Some((gy - sum) * y))
     }
 }
@@ -118,9 +120,8 @@ impl<T: Float> op::Op<T> for Softplus {
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let gy = ctx.output_grad();
-        let s = ctx.graph();
-        let a = s.exp(ctx.input(0));
-        let b = a + s.scalar(T::one());
+        let a = exp(ctx.input(0));
+        let b = a + ctx.graph().scalar(T::one());
         let gx = gy * (a / b);
         ctx.append_input_grad(Some(gx))
     }
@@ -147,7 +148,7 @@ impl<T: Float> op::Op<T> for Sigmoid {
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let gy = ctx.output_grad();
         let y = ctx.output();
-        ctx.append_input_grad(Some(gy * (y - ctx.graph().square(y))));
+        ctx.append_input_grad(Some(gy * (y - square(y))));
     }
 }
 
@@ -161,8 +162,8 @@ impl<T: Float> op::Op<T> for ReLU {
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let s = ctx.graph();
         let gy = ctx.output_grad();
-        let bin = s.greater(ctx.input(0), s.scalar(T::zero()));
-        ctx.append_input_grad(Some(s.mul(bin, gy)))
+        let bin = greater(ctx.input(0), s.scalar(T::zero()));
+        ctx.append_input_grad(Some(mul(bin, gy)))
     }
 }
 
@@ -199,8 +200,8 @@ impl<T: Float> op::Op<T> for ELU<T> {
         let gx = Tensor::builder(ctx.graph())
             .append_input(ctx.input(0), false)
             .append_input(gy, false)
-            .set_shape(&ctx.graph().shape(gy))
-            .build(ctx.graph(), ELUGrad { alpha: self.alpha });
+            .set_shape(&shape(gy))
+            .build(ELUGrad { alpha: self.alpha });
         ctx.append_input_grad(Some(gx))
     }
 }

@@ -4,6 +4,7 @@ extern crate ndarray;
 use ag::{Graph, VariableEnvironment};
 use std::collections::HashMap;
 use std::ops::Deref;
+use ag::tensor_ops as T;
 
 type Tensor<'graph> = ag::Tensor<'graph, f32>;
 
@@ -26,19 +27,19 @@ impl<'g> LSTM<'g> {
         var: &HashMap<&str, Tensor<'g>>,
     ) -> &Tensor<'g> {
         let (cell, h) = {
-            let ref last_output = self.hs.pop().unwrap_or_else(|| g.zeros(&g.shape(x)));
-            let last_cell = self.cells.pop().unwrap_or_else(|| g.zeros(&g.shape(x)));
+            let ref last_output = self.hs.pop().unwrap_or_else(|| g.zeros(&T::shape(x)));
+            let last_cell = self.cells.pop().unwrap_or_else(|| g.zeros(&T::shape(x)));
 
-            let xh = g.matmul(x, var["wx"]) + g.matmul(last_output, var["wh"]) + var["b"];
+            let xh = T::matmul(x, var["wx"]) + T::matmul(last_output, var["wh"]) + var["b"];
 
             let size = self.vector_dim as isize;
-            let i = g.slice(xh, &[0, 0 * size], &[-1, 1 * size]);
-            let f = g.slice(xh, &[0, 1 * size], &[-1, 2 * size]);
-            let c = g.slice(xh, &[0, 2 * size], &[-1, 3 * size]);
-            let o = g.slice(xh, &[0, 3 * size], &[-1, 4 * size]);
+            let i = T::slice(xh, &[0, 0 * size], &[-1, 1 * size]);
+            let f = T::slice(xh, &[0, 1 * size], &[-1, 2 * size]);
+            let c = T::slice(xh, &[0, 2 * size], &[-1, 3 * size]);
+            let o = T::slice(xh, &[0, 3 * size], &[-1, 4 * size]);
 
-            let cell = g.sigmoid(f) * last_cell + g.sigmoid(i) * g.tanh(c);
-            let h = g.sigmoid(o) * g.tanh(&cell);
+            let cell = T::sigmoid(f) * last_cell + T::sigmoid(i) * T::tanh(c);
+            let h = T::sigmoid(o) * T::tanh(&cell);
             (cell, h)
         };
         self.cells.push(cell);
@@ -94,23 +95,23 @@ pub fn main() {
         };
 
         let ns = g.env().default_namespace();
-        let var = g.variable_map_by_name(&ns);
+        let var = g.var_tensors_by_name(&ns).collect::<HashMap<_, _>>();
         let sentences = g.placeholder(&[-1, max_sent]);
 
         // Compute cross entropy losses for each LSTM step
         let losses: Vec<Tensor> = (0..max_sent - 1)
             .map(|i| {
-                let cur_id = g.slice(sentences, &[0, i], &[-1, i + 1]);
-                let next_id = g.slice(sentences, &[0, i + 1], &[-1, i + 2]);
-                let x = g.squeeze(g.gather(var["lookup_table"], &cur_id, 0), &[1]);
+                let cur_id = T::slice(sentences, &[0, i], &[-1, i + 1]);
+                let next_id = T::slice(sentences, &[0, i + 1], &[-1, i + 2]);
+                let x = T::squeeze(T::gather(var["lookup_table"], &cur_id, 0), &[1]);
                 let h = rnn.step(x, g.deref(), &var);
-                let prediction = g.matmul(h, var["w_pred"]);
-                g.sparse_softmax_cross_entropy(prediction, next_id)
+                let prediction = T::matmul(h, var["w_pred"]);
+                T::sparse_softmax_cross_entropy(prediction, next_id)
             })
             .collect();
 
         // Aggregate losses of generated words
-        let loss = g.add_n(&losses);
+        let loss = T::add_n(&losses);
 
         // Compute gradients
         let vars = &[
@@ -120,7 +121,7 @@ pub fn main() {
             var["lookup_table"],
             var["w_pred"],
         ];
-        let grads = g.grad(&[loss], vars);
+        let grads = T::grad(&[loss], vars);
 
         // test with toy data
         ag::test_helper::check_theoretical_grads(

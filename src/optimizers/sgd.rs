@@ -1,5 +1,5 @@
 //! Stochastic gradient descent optimizer
-use crate::ops::gradient_descent_ops::sgd;
+use crate::tensor_ops::gradient_descent_ops::sgd;
 use crate::tensor::Tensor;
 use crate::{Float, Graph};
 
@@ -60,7 +60,7 @@ impl<'g, T: Float> SGD<T> {
                 Tensor::builder(g)
                     .append_input(&params[i], true)
                     .append_input(&grads[i], false)
-                    .build(g.internal(), sgd::SGDOp::new(self.lr)),
+                    .build(sgd::SGDOp::new(self.lr)),
             );
         }
         ret

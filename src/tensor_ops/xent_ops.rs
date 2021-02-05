@@ -1,6 +1,7 @@
 use crate::ndarray_ext::{NdArray, NdArrayView};
 use crate::op;
-use crate::ops;
+use crate::tensor_ops;
+use crate::tensor_ops::*;
 use crate::tensor::Tensor;
 use crate::Float;
 use ndarray;
@@ -16,15 +17,15 @@ pub struct LogSoftmax {
 impl<T: Float> op::Op<T> for LogSoftmax {
     fn compute(&self, ctx: &mut crate::op::ComputeContext<T>) -> Result<(), crate::op::OpError> {
         let x = &ctx.input(0);
-        ctx.append_output(x - &crate::ops::math_ops::logsumexp_forward(&x, self.axis, true));
+        ctx.append_output(x - &crate::tensor_ops::math_ops::logsumexp_forward(&x, self.axis, true));
         Ok(())
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let s = ctx.graph();
         let gy = ctx.output_grad();
-        let sm = s.exp(ctx.output());
-        let sum = s.reduce_sum(gy, &[1], true);
+        let sm = exp(ctx.output());
+        let sum = reduce_sum(gy, &[1], true);
         let mul = sm * sum;
         ctx.append_input_grad(Some(gy - mul));
     }
@@ -51,10 +52,10 @@ impl<T: Float> op::Op<T> for SigmoidCrossEntropy {
         let t = ctx.input(1);
         let gy = ctx.output_grad();
         let gx1 = {
-            let exp = s.exp(x);
+            let exp = exp(x);
             ((exp / (s.scalar(T::one()) + exp)) - t) * gy
         };
-        let gx2 = s.neg(gy * t);
+        let gx2 = neg(gy * t);
         ctx.append_input_grad(Some(gx1));
         ctx.append_input_grad(Some(gx2));
     }
@@ -63,7 +64,7 @@ impl<T: Float> op::Op<T> for SigmoidCrossEntropy {
 impl<T: Float> op::Op<T> for SparseSoftmaxCrossEntropy {
     fn compute(&self, ctx: &mut crate::op::ComputeContext<T>) -> Result<(), crate::op::OpError> {
         let (x, t) = (&ctx.input(0), &ctx.input(1));
-        let log_x: NdArray<T> = x - &ops::math_ops::logsumexp_forward(x, 1, true);
+        let log_x: NdArray<T> = x - &tensor_ops::math_ops::logsumexp_forward(x, 1, true);
 
         // validation
         {
@@ -116,18 +117,18 @@ impl<T: Float> op::Op<T> for SparseSoftmaxCrossEntropy {
         let s = ctx.graph();
         let t = ctx.input(1);
         let gy = ctx.output_grad();
-        let log_x = s.nth_tensor(ctx.output(), 1);
+        let log_x = nth_tensor(ctx.output(), 1);
 
-        let gx1 = Tensor::builder(ctx.graph())
+        let gx1 = Tensor::builder(s)
             .append_input(&log_x, false)
             .append_input(&t, false)
             .append_input(&gy, false)
-            .build(s, SparseSoftmaxCrossEntropyGrad);
+            .build(SparseSoftmaxCrossEntropyGrad);
 
         // gx2 won't be used in most cases.
         let gx2 = {
-            let x = s.exp(log_x);
-            let sum = s.reduce_sum(x * log_x, &[1], true);
+            let x = exp(log_x);
+            let sum = reduce_sum(x * log_x, &[1], true);
             x * gy * (sum - log_x)
         };
 
@@ -160,7 +161,7 @@ impl<T: Float> op::Op<T> for SparseSoftmaxCrossEntropyGrad {
 impl<T: Float> op::Op<T> for SoftmaxCrossEntropy {
     fn compute(&self, ctx: &mut crate::op::ComputeContext<T>) -> Result<(), crate::op::OpError> {
         let x = &ctx.input(0);
-        let log_x: NdArray<T> = x - &ops::math_ops::logsumexp_forward(x, 1, true);
+        let log_x: NdArray<T> = x - &tensor_ops::math_ops::logsumexp_forward(x, 1, true);
         // `t` must be one-hot
         let t = &ctx.input(1);
         assert_eq!(log_x.ndim(), 2, "x must be 2-ranked tensor");
@@ -179,9 +180,9 @@ impl<T: Float> op::Op<T> for SoftmaxCrossEntropy {
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let s = ctx.graph();
         let output = ctx.output();
-        let log_x = s.nth_tensor(output, 1);
+        let log_x = nth_tensor(output, 1);
         let gy = ctx.output_grad();
-        let x = s.exp(&log_x);
+        let x = exp(&log_x);
         let t = ctx.input(1);
 
         // x = softmax, gy = dy/dx
@@ -193,7 +194,7 @@ impl<T: Float> op::Op<T> for SoftmaxCrossEntropy {
 
         // gx2 won't be used in most cases
         let gx2 = {
-            let sum = s.reduce_sum(x * log_x, &[-1], true);
+            let sum = reduce_sum(x * log_x, &[-1], true);
             gy * (sum - log_x) * output
         };
 

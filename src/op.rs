@@ -8,6 +8,7 @@ use std::any::type_name;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem;
+use std::cell::{RefCell, RefMut};
 
 // Properties for op's `compute` method.
 // Actual number of inout/output nodes are around 1~2 in most cases.
@@ -53,6 +54,7 @@ impl fmt::Display for OpError {
 /// use ndarray;
 /// use autograd as ag;
 /// use autograd::op::OpError;
+/// use autograd::tensor_ops::*;
 ///
 /// type NdArray<T: ag::Float> = ndarray::Array<T, ndarray::IxDyn>;
 ///
@@ -76,7 +78,7 @@ impl fmt::Display for OpError {
 ///         // Symbolic gradient of the input of Sigmoid
 ///         let gy = ctx.output_grad();
 ///         let y = ctx.output();
-///         let gx = gy * (y - ctx.graph().square(y));
+///         let gx = gy * (y - square(y));
 ///         ctx.append_input_grad(Some(gx));
 ///     }
 /// }
@@ -86,7 +88,7 @@ impl fmt::Display for OpError {
 /// -> ag::Tensor<'graph, F> {
 ///     ag::Tensor::builder(g)
 ///            .append_input(x, false)
-///            .build(g, Sigmoid)
+///            .build(Sigmoid)
 /// }
 /// ```
 pub trait Op<F: Float> {
@@ -173,19 +175,22 @@ impl<'v, T: Float> OpInput<'v, T> {
 ///     fn grad(&self, ctx: &mut ag::op::GradientContext<T>) { /* ... */ }
 /// }
 /// ```
-pub struct ComputeContext<'t, 'v, T: Float> {
-    node: &'t TensorInternal<T>,
+// pub struct ComputeContext<'t, 'v, T: Float> {
+pub struct ComputeContext<'v, T: Float> {
+    // node: &'t TensorInternal<T>,
     // Input arrays
     xs: InputArray<OpInput<'v, T>>,
     // Output arrays
     pub(crate) ys: OutputArray<crate::ArrRepr<'v, T>>,
 }
 
-impl<'g, 't, 'v, T: Float> ComputeContext<'t, 'v, T> {
+// impl<'g, 't, 'v, T: Float> ComputeContext<'t, 'v, T> {
+impl<'g, 't, 'v, T: Float> ComputeContext<'v, T> {
     #[inline]
-    pub(crate) fn new(node: &'t TensorInternal<T>, xs: InputArray<OpInput<'v, T>>) -> Self {
+    // pub(crate) fn new(node: &'t TensorInternal<T>, xs: InputArray<OpInput<'v, T>>) -> Self {
+    pub(crate) fn new(xs: InputArray<OpInput<'v, T>>) -> Self {
         ComputeContext {
-            node,
+            // node,
             xs,
             ys: OutputArray::new(),
         }
@@ -205,7 +210,9 @@ impl<'g, 't, 'v, T: Float> ComputeContext<'t, 'v, T> {
                 Some(ret) => ret,
                 None => panic!(
                     "Bad op impl of {}: input({})/input_mut({}) cannot be called twice",
-                    self.node.get_op().name(),
+                    // self.node.get_op().name(),
+                    // FIXME:
+                    "name",
                     i,
                     i
                 ),
@@ -213,7 +220,9 @@ impl<'g, 't, 'v, T: Float> ComputeContext<'t, 'v, T> {
             _ => {
                 panic!(
                     "Bad op impl of {}: cannot perform immutable borrowing for input({})",
-                    self.node.get_op().name(),
+                    // self.node.get_op().name(),
+                    // FIMXE:
+                    "name",
                     i
                 );
             }
@@ -234,7 +243,9 @@ impl<'g, 't, 'v, T: Float> ComputeContext<'t, 'v, T> {
                 Some(ret) => ret,
                 None => panic!(
                     "Bad op impl of {}: input({})/input_mut({}) cannot be called twice",
-                    self.node.get_op().name(),
+                    // self.node.get_op().name(),
+                    // FIMXE:
+                    "name",
                     i,
                     i
                 ),
@@ -242,7 +253,9 @@ impl<'g, 't, 'v, T: Float> ComputeContext<'t, 'v, T> {
             _ => {
                 panic!(
                     "Bad op impl of {}: cannot perform mutable borrowing for input({})",
-                    self.node.get_op().name(),
+                    // self.node.get_op().name(),
+                    // FIMXE:
+                    "name",
                     i
                 );
             }
@@ -281,22 +294,23 @@ impl<'g, 't, 'v, T: Float> ComputeContext<'t, 'v, T> {
 ///
 /// ```
 /// use autograd as ag;
+/// use ag::tensor_ops as T;
 ///
 /// struct Sigmoid;
 ///
-/// impl<T: ag::Float> ag::op::Op<T> for Sigmoid {
-///     fn compute(&self, ctx: &mut ag::op::ComputeContext<T>) -> Result<(), ag::op::OpError> {
+/// impl<F: ag::Float> ag::op::Op<F> for Sigmoid {
+///     fn compute(&self, ctx: &mut ag::op::ComputeContext<F>) -> Result<(), ag::op::OpError> {
 ///         /* ... */
 ///         Ok(())
 ///     }
 ///
-///     fn grad(&self, ctx: &mut ag::op::GradientContext<T>) {
+///     fn grad(&self, ctx: &mut ag::op::GradientContext<F>) {
 ///         // Symbolic gradient of the input of Sigmoid
 ///         let gy = ctx.output_grad();
 ///         // Symbolic output tensor
 ///         let y = ctx.output();
 ///         // `Tensor` computations
-///         let gx = gy * (y - ctx.graph().square(y));
+///         let gx = gy * (y - T::square(y));
 ///         // Propagates input's gradient.
 ///         ctx.append_input_grad(Some(gx));
 ///     }
@@ -324,21 +338,21 @@ impl<'g, T: Float> GradientContext<'g, T> {
     }
 
     // Call Op::grad and return `gxs`
-    pub(crate) fn extract_input_grads(mut self) -> InputArray<Option<Tensor<'g, T>>> {
+    pub(crate) fn get_input_grads(mut self) -> InputArray<Option<Tensor<'g, T>>> {
         let id = self.y.id;
-        unsafe {
-            // steal op
-            let stolen = mem::replace(&mut self.graph().access_inner_mut(id).op, None).unwrap();
-            // call Op::grad
-            stolen.grad(&mut self);
-            // restore
-            mem::swap(&mut self.graph().access_inner_mut(id).op, &mut Some(stolen));
-            debug_assert!(
-                !self.gxs.is_empty(),
-                "Bad Op impl: GradientContext::set_input_grads was not called"
-            );
-            self.gxs
-        }
+        // steal op
+        let stolen = self.graph().access_inner_mut(id).op.take().unwrap();
+
+        // call Op::grad
+        stolen.grad(&mut self);
+
+        // restore
+        mem::swap(&mut self.graph().access_inner_mut(id).op, &mut Some(stolen));
+        debug_assert!(
+            !self.gxs.is_empty(),
+            "Bad Op impl: GradientContext::set_input_grads was not called"
+        );
+        self.gxs
     }
 
     /// Returns the symbolic gradient of the op's output.
@@ -357,7 +371,7 @@ impl<'g, T: Float> GradientContext<'g, T> {
     #[inline]
     pub fn inputs(&self) -> InputArray<Tensor<'g, T>> {
         let mut ret = InputArray::new();
-        for input in self.y.input_tensors() {
+        for input in self.y.input_tensors().iter() {
             ret.push(self.graph.tensor(input.id));
         }
         ret
@@ -375,7 +389,7 @@ impl<'g, T: Float> GradientContext<'g, T> {
     /// Returns the number of inputs.
     #[inline]
     pub fn num_inputs(&self) -> usize {
-        unsafe { self.y.inner().in_edges.len() }
+        self.y.inner().in_edges.len()
     }
 
     /// Returns a graph object that is usable for tensor computations in the context.

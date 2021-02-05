@@ -14,7 +14,7 @@ documentation = "https://docs.rs/autograd/"
 [dependencies]
 rand = "0.8.0"
 rand_distr = "0.4.0"
-ndarray = "0.12.1"
+ndarray = { version = "0.14.0", features = ["serde", "approx"] }
 rayon = "1.0"
 libc = "0.2"
 matrixmultiply = "0.2.2"
@@ -23,6 +23,10 @@ num = "0.3"
 rustc-hash = "1.0.1"
 smallvec = "1.2.0"
 uuid = { version = "0.8", features = ["v4"] }
+serde = "1.0.120"
+serde_derive = "1.0.120"
+serde_json = "1.0"
+approx = "0.4.0"
 # -- blas deps
 blas-src = { version = "0.7", optional = true }
 intel-mkl-src = { version = "0.5", optional = true }

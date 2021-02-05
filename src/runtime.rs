@@ -2,7 +2,7 @@ use crate::ndarray_ext::{NdArray, NdArrayView};
 use crate::op::{self, ComputeContext, InputArray, OpInput};
 use crate::smallvec::SmallVec;
 use crate::tensor::{Tensor, TensorInternal};
-use crate::variable::VariableID;
+use crate::variable::VarArrayID;
 use crate::{Float, GraphRepr};
 use crate::{FxHashMap, Graph, VariableEnvironment};
 use std::cell::{Ref, RefMut, UnsafeCell};
@@ -314,20 +314,20 @@ impl<'v, 'e, F: Float> VariableGuardRegister<'v, F> {
         Self { immutable, mutable }
     }
 
-    fn set(&mut self, vid: VariableID, mut_usage: bool, env: &'v VariableEnvironment<'e, F>) {
+    fn set(&mut self, vid: VarArrayID, mut_usage: bool, env: &'v VariableEnvironment<'e, F>) {
         if mut_usage {
             debug_assert!(
                 self.mutable[vid.0].is_none(),
                 "Bad op impl: taking a variable"
             );
-            self.mutable[vid.0] = Some(UnsafeCell::new(env.variable_vec[vid.0].borrow_mut()));
+            self.mutable[vid.0] = Some(UnsafeCell::new(env.array_list[vid.0].borrow_mut()));
         } else {
             debug_assert!(self.immutable[vid.0].is_none(), "Bad op impl");
-            self.immutable[vid.0] = Some(UnsafeCell::new(env.variable_vec[vid.0].borrow()));
+            self.immutable[vid.0] = Some(UnsafeCell::new(env.array_list[vid.0].borrow()));
         }
     }
 
-    fn borrow(&self, vid: VariableID, mut_usage: bool) -> OpInput<'v, F> {
+    fn borrow(&self, vid: VarArrayID, mut_usage: bool) -> OpInput<'v, F> {
         unsafe {
             if mut_usage {
                 OpInput::new_mut(
@@ -349,7 +349,7 @@ impl<'v, 'e, F: Float> VariableGuardRegister<'v, F> {
         }
     }
 
-    fn unset(&mut self, vid: VariableID, mut_usage: bool) {
+    fn unset(&mut self, vid: VarArrayID, mut_usage: bool) {
         if mut_usage {
             self.mutable[vid.0] = None;
         } else {
@@ -374,7 +374,7 @@ impl<F: Float> GraphRepr<F> {
         // Storage in which compute results are stored. Accessed through UnsafeCell.
         let storage = OutputStorage::new();
 
-        let mut variable_guard_register = VariableGuardRegister::new(ctx.variable_vec.len());
+        let mut variable_guard_register = VariableGuardRegister::new(ctx.array_list.len());
 
         // Vec<(node_id, is_parent)>
         let mut dfs_stack = Vec::<(usize, bool)>::with_capacity(1 << 10);
@@ -389,7 +389,7 @@ impl<F: Float> GraphRepr<F> {
                 //  in this block, relocation of Graph::node_set's contents must not be occurred
                 let node = self.access_inner(node_id);
                 if is_parent {
-                    if would_not_visit(node, &node_info_map) {
+                    if would_not_visit(&node, &node_info_map) {
                         continue;
                     }
 
@@ -439,7 +439,8 @@ impl<F: Float> GraphRepr<F> {
                     // ====================================================
 
                     let installed_node_info = input_status.and_then(|()| {
-                        let mut ctx = ComputeContext::new(node, xs);
+                        // let mut ctx = ComputeContext::new(node, xs);
+                        let mut ctx = ComputeContext::new(xs);
                         let status = node.get_op().compute(&mut ctx);
                         let ret = status.map(|()| ctx.ys);
                         // register compute result
@@ -463,7 +464,7 @@ impl<F: Float> GraphRepr<F> {
                     // Push children if needed
                     for child in &node.in_edges {
                         let child = self.access_inner(child.id);
-                        if !would_not_visit(child, &node_info_map) {
+                        if !would_not_visit(&child, &node_info_map) {
                             dfs_stack.push((child.id, false));
                         }
                     }
@@ -477,7 +478,7 @@ impl<F: Float> GraphRepr<F> {
             let t = t.as_ref();
             let arr = if let Some(vid) = t.get_variable_id() {
                 // case 1: variable tensor
-                Ok(ctx.variable_vec[vid.0].clone().into_inner())
+                Ok(ctx.array_list[vid.0].clone().into_inner())
             } else if t.is_placeholder() {
                 // case 2: placeholder tensor
                 Ok(retrieve_feed(feeds, t.id()).to_owned())
@@ -506,9 +507,11 @@ impl<F: Float> GraphRepr<F> {
     }
 }
 
+use crate::tensor_ops as T;
+
 #[inline]
 fn would_not_visit<F: Float>(
-    node: &TensorInternal<F>,
+    node: &Ref<TensorInternal<F>>,
     info_map: &FxHashMap<usize, Result<op::OutputArray<ValueInfo>, op::OpError>>,
 ) -> bool {
     node.is_placeholder || node.is_variable() || info_map.contains_key(&node.id())
@@ -519,7 +522,7 @@ fn test_eval2() {
     let mut ctx = crate::VariableEnvironment::new();
     ctx.run(|g: &mut Graph<f32>| {
         let a = g.ones(&[1, 1]);
-        let b = g.sigmoid(a);
+        let b = T::sigmoid(a);
         b.eval(&[], g).unwrap();
     })
 }
@@ -529,8 +532,8 @@ fn test_eval() {
     let mut ctx = VariableEnvironment::new();
     ctx.run(|g| {
         let v: Tensor<f32> = g.placeholder(&[3, 2, 1]);
-        let z = g.reduce_sum(g.squeeze(v, &[2]), &[0, 1], false);
-        let grad = g.grad(&[z], &[v]);
+        let z = T::reduce_sum(T::squeeze(v, &[2]), &[0, 1], false);
+        let grad = T::grad(&[z], &[v]);
         let eval_result = grad[0].eval(&[v.given(crate::ndarray_ext::ones(&[3, 2, 1]).view())], g);
         assert_eq!(eval_result.as_ref().unwrap().shape(), &[3, 2, 1]);
     })

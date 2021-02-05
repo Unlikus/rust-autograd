@@ -1,4 +1,5 @@
 use super::*;
+use crate::tensor_ops::*;
 
 pub struct Conv2DTranspose {
     pub pad: usize,
@@ -280,7 +281,6 @@ impl<T: Float> crate::op::Op<T> for Conv2DTranspose {
             .append_input(&gy, false)
             .append_input(&w, false)
             .build(
-                s,
                 super::conv2d::Conv2D {
                     pad: self.pad,
                     stride: self.stride,
@@ -291,9 +291,8 @@ impl<T: Float> crate::op::Op<T> for Conv2DTranspose {
         let gw = Tensor::builder(ctx.graph())
             .append_input(&gy, false)
             .append_input(&x, false)
-            .append_input(&s.stop_gradient(w), false)
+            .append_input(&stop_gradient(w), false)
             .build(
-                s,
                 Conv2DTransposeFilterGrad {
                     pad: self.pad,
                     stride: self.stride,
@@ -466,7 +465,6 @@ impl<T: Float> crate::op::Op<T> for Conv2DTransposeFilterGrad {
             .append_input(&x, false)
             .append_input(&gw, false)
             .build(
-                s,
                 Conv2DTranspose {
                     pad: self.pad,
                     stride: self.stride,
@@ -478,7 +476,6 @@ impl<T: Float> crate::op::Op<T> for Conv2DTransposeFilterGrad {
             .append_input(&gy, false)
             .append_input(&gw, false)
             .build(
-                s,
                 super::conv2d::Conv2D {
                     pad: self.pad,
                     stride: self.stride,
@@ -491,6 +488,8 @@ impl<T: Float> crate::op::Op<T> for Conv2DTransposeFilterGrad {
         ctx.append_input_grad(None);
     }
 }
+
+use crate::tensor_ops as T;
 
 #[test]
 fn test_deconv() {
@@ -513,7 +512,7 @@ fn test_deconv() {
     let out_val = ctx.run(|s| {
         let w = s.ones(&[ych, xch, kh, kw]);
         let g = s.ones(&[batch_size, ych, yh, yw]);
-        let out = s.conv2d_transpose(g, w, 0, 1);
+        let out = T::conv2d_transpose(g, w, 0, 1);
         out.eval(&[], s).unwrap()
     });
     out_val.all_close(&ans, 1e-3);

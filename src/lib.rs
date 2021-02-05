@@ -13,13 +13,14 @@
 //!
 //! ```rust
 //! use autograd as ag;
+//! use ag::tensor_ops as T;
 //!
 //! ag::run(|g: &mut ag::Graph<_>| {
 //!     let a: ag::Tensor<f32> = g.ones(&[60]);
 //!     let b: ag::Tensor<f32> = g.ones(&[24]);
-//!     let c: ag::Tensor<f32> = g.reshape(a, &[3, 4, 5]);
-//!     let d: ag::Tensor<f32> = g.reshape(b, &[4, 3, 2]);
-//!     let e: ag::Tensor<f32> = g.tensordot(c, d, &[1, 0], &[0, 1]);
+//!     let c: ag::Tensor<f32> = T::reshape(a, &[3, 4, 5]);
+//!     let d: ag::Tensor<f32> = T::reshape(b, &[4, 3, 2]);
+//!     let e: ag::Tensor<f32> = T::tensordot(c, d, &[1, 0], &[0, 1]);
 //!     let result: ag::ndarray::Array<_, _> = e.eval(&[], g).unwrap();  // Getting `ndarray::Array` here.
 //! });
 //! ```
@@ -33,6 +34,7 @@
 //!
 //! ```rust
 //! use autograd as ag;
+//! use ag::tensor_ops as T;
 //!
 //! # fn main() {
 //! ag::run(|g: &mut ag::Graph<_>| {
@@ -41,15 +43,15 @@
 //!     let z = 2.*x*x + 3.*y + 1.;
 //!
 //!     // dz/dy
-//!     let gy = &g.grad(&[z], &[y])[0];
+//!     let gy = &T::grad(&[z], &[y])[0];
 //!     println!("{:?}", gy.eval(&[], g));   // => Ok(3.)
 //!
 //!     // dz/dx (requires to fill the placeholder `x`)
-//!     let gx = &g.grad(&[z], &[x])[0];
+//!     let gx = &T::grad(&[z], &[x])[0];
 //!     let feed = ag::ndarray::arr0(2.);
 //!     println!("{:?}", gx.eval(&[x.given(feed.view())], g));  // => Ok(8.)
 //!     // ddz/dx (differentiates `z` again)
-//!     let ggx = &g.grad(&[gx], &[x])[0];
+//!     let ggx = &T::grad(&[gx], &[x])[0];
 //!     println!("{:?}", ggx.eval(&[], g));  // => Ok(4.)
 //! });
 //! # }
@@ -62,6 +64,8 @@
 //! // This is a softmax regression for MNIST digits classification with Adam.
 //! // This achieves 0.918 test accuracy after 3 epochs (0.11 sec/epoch on 2.7GHz Intel Core i5).
 //! use autograd::{self as ag, optimizers::adam::Adam, variable::NamespaceTrait};
+//! use autograd::tensor_ops::*;
+//! use std::collections::HashMap;
 //!
 //! let mut env = ag::VariableEnvironment::new();
 //!
@@ -79,12 +83,12 @@
 //! for epoch in 0..max_epoch {
 //!     env.run(|g| {
 //!         let ns = g.env().default_namespace();
-//!         let var = g.variable_map_by_name(&ns);
+//!         let var = g.var_tensors_by_name(&ns).collect::<HashMap<_, _>>();
 //!         let x = g.placeholder(&[-1, 28*28]);
 //!         let y = g.placeholder(&[-1]);
-//!         let z = g.matmul(x, var["w"]) + var["b"];
-//!         let mean_loss = g.reduce_mean(g.sparse_softmax_cross_entropy(z, &y), &[0], false);
-//!         let grads = &g.grad(&[&mean_loss], &[var["w"], var["b"]]);
+//!         let z = matmul(x, var["w"]) + var["b"];
+//!         let mean_loss = reduce_mean(sparse_softmax_cross_entropy(z, &y), &[0], false);
+//!         let grads = &grad(&[&mean_loss], &[var["w"], var["b"]]);
 //!         let updates: &[ag::Tensor<f32>] =
 //!             &adam.update(&[var["w"], var["b"]], grads, g);
 //!
@@ -106,11 +110,12 @@
 //!
 //! ```rust
 //! use autograd as ag;
+//! use ag::tensor_ops as T;
 //!
 //! ag::run(|g| {
 //!     let a: ag::Tensor<f32> = g.zeros(&[4, 2]).show();
 //!     let b: ag::Tensor<f32> = g.ones(&[2, 3]).show_shape();
-//!     let c = g.matmul(a, b).show_with("MatMul:");
+//!     let c = T::matmul(a, b).show_with("MatMul:");
 //!
 //!     c.eval(&[], g);
 //!     // [[0.0, 0.0],
@@ -129,6 +134,7 @@
 //! ```
 //!
 
+#![feature(member_constraints)]
 #[allow(unused_imports)]
 // Expose to prevent version conflict
 #[macro_use(s)]
@@ -158,15 +164,18 @@ extern crate rayon;
 extern crate rustc_hash;
 pub(crate) extern crate smallvec;
 extern crate uuid;
+extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
+extern crate approx;
 
 mod gradient;
 pub(crate) mod graph;
 mod hook;
 pub mod ndarray_ext;
 pub mod op;
-pub mod ops;
+pub mod tensor_ops;
 pub mod variable;
-pub use ops as tensor_ops;
 pub mod optimizers;
 mod runtime;
 pub mod tensor;
@@ -187,6 +196,8 @@ pub trait Float:
     + fmt::Display
     + fmt::Debug
     + Sized
+    + Serialize
+    + Deserialize<'static>
     + 'static
 {
 }
@@ -201,6 +212,8 @@ pub trait Int:
     + Send
     + fmt::Display
     + Sized
+    + Serialize
+    + Deserialize<'static>
     + 'static
 {
 }
@@ -214,6 +227,8 @@ impl<T> Float for T where
         + fmt::Display
         + fmt::Debug
         + Sized
+        + Serialize
+        + Deserialize<'static>
         + 'static
 {
 }
@@ -227,6 +242,8 @@ impl<T> Int for T where
         + Sync
         + fmt::Display
         + Sized
+        + Serialize
+        + Deserialize<'static>
         + 'static
 {
 }
@@ -248,6 +265,7 @@ pub use crate::tensor::Tensor;
 pub(crate) use crate::ndarray_ext::ArrRepr;
 
 pub use crate::graph::{run, with, Graph, GraphRepr};
+use serde::{Serialize, Deserialize};
 
 /// Error during tensor's evaluation.
 #[derive(Debug, PartialEq)]

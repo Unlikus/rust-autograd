@@ -230,12 +230,11 @@ impl<T: Float> crate::op::Op<T> for MaxPool2D {
         let s = ctx.graph();
         let gy = &ctx.output_grad();
         let y = &ctx.output();
-        let indices = s.nth_tensor(y, 1);
+        let indices = nth_tensor(y, 1);
         let gx = Tensor::builder(ctx.graph())
             .append_input(gy, false)
             .append_input(&indices, false)
             .build(
-                s,
                 MaxPool2DGrad {
                     pad: self.pad,
                     stride: self.stride,
@@ -290,7 +289,6 @@ impl<T: Float> crate::op::Op<T> for MaxPool2DGrad {
             .append_input(&ggx, false)
             .append_input(argmax, false)
             .build(
-                s,
                 MaxPool2DGradGrad {
                     pad: self.pad,
                     stride: self.stride,

@@ -9,6 +9,7 @@ use ndarray::s;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::time::Instant;
+use ag::tensor_ops as T;
 
 type Tensor<'graph> = ag::Tensor<'graph, f32>;
 
@@ -34,10 +35,9 @@ macro_rules! timeit {
 }
 
 fn conv_pool<'g>(x: Tensor<'g>, w: Tensor<'g>, b: Tensor<'g>) -> Tensor<'g> {
-    let g = x.graph();
-    let y1 = g.conv2d(x, w, 1, 1) + b;
-    let y2 = g.relu(y1);
-    x.graph().max_pool2d(y2, 2, 0, 2)
+    let y1 = T::conv2d(x, w, 1, 1) + b;
+    let y2 = T::relu(y1);
+    T::max_pool2d(y2, 2, 0, 2)
 }
 
 fn inputs<'g>(g: &'g Graph<f32>) -> (Tensor<'g>, Tensor<'g>) {
@@ -46,11 +46,11 @@ fn inputs<'g>(g: &'g Graph<f32>) -> (Tensor<'g>, Tensor<'g>) {
     (x, y)
 }
 
-fn logits<'g>(x: Tensor<'g>, var: &HashMap<&str, Tensor<'g>>, g: &'g ag::Graph<f32>) -> Tensor<'g> {
+fn logits<'g>(x: Tensor<'g>, var: &HashMap<&str, Tensor<'g>>) -> Tensor<'g> {
     let z1 = conv_pool(x, var["w1"], var["b1"]); // map to 32 channel
     let z2 = conv_pool(z1, var["w2"], var["b2"]); // map to 64 channel
-    let z3 = g.reshape(z2, &[-1, 64 * 7 * 7]); // flatten
-    x.graph().matmul(z3, var["w3"]) + var["b3"]
+    let z3 = T::reshape(z2, &[-1, 64 * 7 * 7]); // flatten
+    T::matmul(z3, var["w3"]) + var["b3"]
 }
 
 fn get_permutation(size: usize) -> Vec<usize> {
@@ -123,15 +123,17 @@ fn main() {
                 env.run(|g| {
                     // make graph
                     let ns = g.env().default_namespace();
-                    let var = g.variable_map_by_name(&ns);
-                    let (x, y) = inputs(g.deref());
-                    let logits = logits(x, &var, g.deref());
-                    let loss = g.sparse_softmax_cross_entropy(&logits, &y);
+                    let var = g.var_tensors_by_name(&ns).collect::<HashMap<_, _>>();
+                    let (x, y) = inputs(g);
+                    let logits = logits(x, &var);
+                    let loss = T::sparse_softmax_cross_entropy(&logits, &y);
                     let var_list: Vec<&Tensor> = var.values().collect();
-                    let grads = &g.grad(&[&loss], &var_list);
+                    let grads = &T::grad(&[&loss], &var_list);
                     let update_ops: &[Tensor] = &adam.update(&var_list, grads, g);
 
-                    g.eval(update_ops, &[x.given(x_batch), y.given(y_batch)]);
+                    for result in g.eval(update_ops, &[x.given(x_batch), y.given(y_batch)]) {
+                        result.unwrap();
+                    }
                 });
             }
             println!("finish epoch {}", epoch);
@@ -141,11 +143,11 @@ fn main() {
     // -- test --
     env.run(|g| {
         let ns = g.env().default_namespace();
-        let var = g.variable_map_by_name(&ns);
-        let (x, y) = inputs(g.deref());
-        let logits = logits(x, &var, g.deref());
-        let predictions = g.argmax(logits, -1, true);
-        let accuracy = g.reduce_mean(&g.equal(predictions, &y), &[0, 1], false);
+        let var = g.var_tensors_by_name(&ns).collect::<HashMap<_, _>>();
+        let (x, y) = inputs(g);
+        let logits = logits(x, &var);
+        let predictions = T::argmax(logits, -1, true);
+        let accuracy = T::reduce_mean(&T::equal(predictions, &y), &[0, 1], false);
         println!(
             "test accuracy: {:?}",
             accuracy.eval(&[x.given(x_test.view()), y.given(y_test.view())], g)

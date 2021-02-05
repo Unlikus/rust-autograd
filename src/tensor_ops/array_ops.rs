@@ -6,6 +6,7 @@ use crate::ndarray_ext::{NdArray, NdArrayView};
 use crate::op;
 use crate::tensor::Tensor;
 use crate::Float;
+use crate::tensor_ops::*;
 use std::iter::FromIterator;
 
 pub struct ExpandDims;
@@ -215,8 +216,8 @@ impl<T: Float> op::Op<T> for Reshape {
         let x = ctx.input(0);
         let gx = Tensor::builder(ctx.graph())
             .append_input(gy, false)
-            .append_input(scope.shape(&x), false)
-            .build(scope, Reshape);
+            .append_input(shape(&x), false)
+            .build(Reshape);
         ctx.append_input_grad(Some(gx));
         ctx.append_input_grad(None);
     }
@@ -291,10 +292,10 @@ impl<T: Float> op::Op<T> for IndexOp {
         let x = ctx.input(0);
         let gy = ctx.output_grad();
         let gx = Tensor::builder(ctx.graph())
-            .set_shape(&scope.shape(x))
+            .set_shape(&shape(x))
             .append_input(&x, false)
             .append_input(&gy, false)
-            .build(scope, op);
+            .build(op);
         ctx.append_input_grad(Some(gx));
     }
 }
@@ -377,8 +378,8 @@ impl<T: Float> op::Op<T> for Gather {
             .append_input(&x, false)
             .append_input(&x1, false)
             .append_input(&gy, false)
-            .set_shape(&scope.shape(x))
-            .build(scope, GatherGrad { axis: self.axis });
+            .set_shape(&shape(x))
+            .build(GatherGrad { axis: self.axis });
         ctx.append_input_grad(None);
         ctx.append_input_grad(Some(gx));
     }
@@ -459,7 +460,7 @@ impl<T: Float> op::Op<T> for GatherGrad {
 
 #[cfg(feature = "mkl")]
 pub(crate) fn inplace_add_impl<F: Float>(mut a: NdArrayViewMut<F>, b: &NdArrayView<F>) {
-    use crate::ops::blas_ffi::{vdAdd, vsAdd, MklInt};
+    use crate::tensor_ops::blas_ffi::{vdAdd, vsAdd, MklInt};
     use crate::same_type;
     unsafe {
         if same_type::<F, f32>() {
@@ -529,11 +530,10 @@ impl<T: Float> op::Op<T> for Clip<T> {
         let gy = ctx.output_grad();
         let x0 = ctx.input(0);
         let gx = Tensor::builder(ctx.graph())
-            .set_shape(&ctx.graph().shape(gy))
+            .set_shape(&shape(gy))
             .append_input(&x0, false)
             .append_input(&gy, false)
             .build(
-                ctx.graph(),
                 ClipGrad {
                     min: self.min,
                     max: self.max,
@@ -562,7 +562,7 @@ impl<T: Float> op::Op<T> for ClipGrad<T> {
 
 impl<T: Float> op::Op<T> for Concat {
     fn compute(&self, ctx: &mut crate::op::ComputeContext<T>) -> Result<(), crate::op::OpError> {
-        let mut views = vec![];
+        let mut views = Vec::with_capacity(ctx.num_inputs());
         for i in 0..ctx.num_inputs() {
             views.push(ctx.input(i));
         }
@@ -573,7 +573,7 @@ impl<T: Float> op::Op<T> for Concat {
             self.axis as usize
         };
 
-        match ndarray::stack(ndarray::Axis(axis), views.as_slice()) {
+        match ndarray::concatenate(ndarray::Axis(axis), views.as_slice()) {
             Ok(y) => {
                 ctx.append_output(y);
                 Ok(())
@@ -590,7 +590,7 @@ impl<T: Float> op::Op<T> for Concat {
 
         for i in 0..num_inputs {
             let mut builder = Tensor::builder(ctx.graph())
-                .set_shape(&ctx.graph().shape(ctx.input(0)))
+                .set_shape(&shape(ctx.input(0)))
                 .append_input(&ctx.output_grad(), false);
 
             for input in inputs.iter() {
@@ -598,7 +598,6 @@ impl<T: Float> op::Op<T> for Concat {
             }
 
             let gx = builder.build(
-                ctx.graph(),
                 ConcatGrad {
                     index: i,
                     axis: self.axis,
@@ -669,7 +668,7 @@ impl<T: Float> op::Op<T> for Tile {
         let x = ctx.input(0);
         let axis = ndarray_ext::normalize_negative_axis(self.axis, x.ndim());
         let views = vec![x.clone(); self.num];
-        match ndarray::stack(ndarray::Axis(axis), views.as_slice()) {
+        match ndarray::concatenate(ndarray::Axis(axis), views.as_slice()) {
             Ok(ret) => {
                 ctx.append_output(ret);
                 Ok(())
@@ -679,8 +678,7 @@ impl<T: Float> op::Op<T> for Tile {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let scope = ctx.graph();
-        ctx.append_input_grad(Some(scope.reduce_sum(
+        ctx.append_input_grad(Some(reduce_sum(
             ctx.output_grad(),
             &[self.axis],
             true,
@@ -710,8 +708,8 @@ impl<T: Float> op::Op<T> for Split {
         let gx = Tensor::builder(ctx.graph())
             .append_input(&x, false)
             .append_input(&gy, false)
-            .set_shape(&ctx.graph().shape(x))
-            .build(ctx.graph(), op);
+            .set_shape(&shape(x))
+            .build(op);
         ctx.append_input_grad(Some(gx));
     }
 }
@@ -785,8 +783,8 @@ impl<T: Float> op::Op<T> for Slice {
         let gx = Tensor::builder(ctx.graph())
             .append_input(&x, false)
             .append_input(&gy, false)
-            .set_shape(&ctx.graph().shape(x))
-            .build(ctx.graph(), op);
+            .set_shape(&shape(x))
+            .build(op);
         ctx.append_input_grad(Some(gx));
     }
 }
@@ -838,7 +836,7 @@ impl<T: Float> op::Op<T> for Squeeze {
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         ctx.append_input_grad(Some(
-            ctx.graph().expand_dims(ctx.output_grad(), &ctx.input(1)),
+            expand_dims(ctx.output_grad(), &ctx.input(1)),
         ));
         ctx.append_input_grad(None);
     }
@@ -867,7 +865,7 @@ impl<T: Float> op::Op<T> for ExpandDims {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        ctx.append_input_grad(Some(ctx.graph().squeeze(ctx.output_grad(), &ctx.input(1))));
+        ctx.append_input_grad(Some(squeeze(ctx.output_grad(), &ctx.input(1))));
         ctx.append_input_grad(None);
     }
 }

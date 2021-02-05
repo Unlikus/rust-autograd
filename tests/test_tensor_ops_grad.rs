@@ -1,17 +1,20 @@
 extern crate autograd as ag;
 extern crate ndarray;
 
+use ag::tensor_ops as T;
+use std::collections::HashMap;
+
 #[test]
 fn get() {
     let mut env = ag::VariableEnvironment::new();
     let v = &env.slot().set(ndarray::arr1(&[1., 2., 3.]));
 
     env.run(|graph| {
-        let var = graph.variable_map_by_id(graph.env());
+        let var = graph.var_tensors_by_id(graph.env()).collect::<HashMap<_, _>>();
         let v = var[v];
         let a: ag::Tensor<f64> = 2. * v;
         let z = a.access_elem(1);
-        let g = graph.grad(&[z], &[v]);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -26,8 +29,8 @@ fn add_n() {
         let v1 = graph.variable_by_id(v1);
         let v2 = graph.variable_by_id(v2);
         let v3 = graph.variable_by_id(v3);
-        let z = graph.add_n(&[v1, v2, v3]);
-        let g = graph.grad(&[z], &[v2]);
+        let z = T::add_n(&[v1, v2, v3]);
+        let g = T::grad(&[z], &[v2]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v2], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -38,8 +41,8 @@ fn clip() {
     let v = env.slot().set(ndarray::arr1(&[1., 2., 3.]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.clip(v, 1.5, 2.5);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::clip(v, 1.5, 2.5);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -51,8 +54,8 @@ fn asinh() {
     let v = env.slot().set(rng.random_uniform(&[3], 0., 0.2));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.asinh(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::asinh(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -64,8 +67,8 @@ fn acosh() {
     let v = env.slot().set(rng.random_uniform(&[3], 0., 0.2));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.acosh(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::acosh(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -77,8 +80,8 @@ fn atanh() {
     let v = env.slot().set(rng.random_uniform(&[3], 0., 0.2));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.atanh(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::atanh(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -90,8 +93,8 @@ fn sinh() {
     let v = env.slot().set(rng.random_uniform(&[3], 0., 0.2));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.sinh(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::sinh(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -103,8 +106,8 @@ fn cosh() {
     let v = env.slot().set(rng.random_uniform(&[3], 0., 0.2));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.cosh(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::cosh(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -116,8 +119,8 @@ fn tanh() {
     let v = env.slot().set(rng.random_uniform(&[3], 0., 0.2));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.tanh(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::tanh(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -129,8 +132,8 @@ fn asin() {
     let v = env.slot().set(rng.random_uniform(&[3], 0., 0.2));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.asin(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::asin(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-2, graph);
     });
 }
@@ -142,8 +145,8 @@ fn acos() {
     let v = env.slot().set(rng.random_uniform(&[3], 0., 0.2));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.acos(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::acos(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -155,8 +158,8 @@ fn atan() {
     let v = env.slot().set(rng.random_uniform(&[3], 0., 0.2));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.atan(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::atan(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -168,8 +171,8 @@ fn sin() {
     let v = env.slot().set(rng.random_uniform(&[3], 0., 0.2));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.sin(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::sin(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -181,8 +184,8 @@ fn cos() {
     let v = env.slot().set(rng.random_uniform(&[3], 0., 0.2));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.cos(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::cos(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -194,8 +197,8 @@ fn tan() {
     let v = env.slot().set(rng.random_uniform(&[3], 0., 0.2));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.tan(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::tan(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-2, graph);
     });
 }
@@ -207,8 +210,8 @@ fn pow() {
     let v = env.slot().set(rng.random_uniform(&[3], 0.9, 1.1));
     env.run(|ctx| {
         let v = ctx.variable_by_id(v);
-        let z = ctx.pow(v, 1.1);
-        let g = ctx.grad(&[z], &[v]);
+        let z = T::pow(v, 1.1);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, ctx);
     });
 }
@@ -221,9 +224,9 @@ fn sqrt() {
     env.run(|graph| {
         let rng = ag::ndarray_ext::ArrayRng::<f64>::default();
         let v = graph.variable_by_id(v);
-        let z = graph.sqrt(v);
-        graph.add(v, z);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::sqrt(v);
+        T::add(v, z);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -235,8 +238,8 @@ fn exp() {
     let v = env.slot().set(rng.random_uniform(&[3], 0.9, 1.1));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.exp(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::exp(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-2, graph);
     });
 }
@@ -249,8 +252,8 @@ fn ln() {
     env.run(|graph| {
         use std::f64;
         let v = graph.variable_by_id(v);
-        let z = graph.ln(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::ln(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-2, graph);
     });
 }
@@ -262,8 +265,8 @@ fn expand_dims() {
     let v = env.slot().set(rng.standard_normal(&[3]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.expand_dims(v, &[0, 2]);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::expand_dims(v, &[0, 2]);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -275,22 +278,22 @@ fn squeeze() {
     let v = env.slot().set(rng.standard_normal(&[3, 1, 2, 1]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.squeeze(v, &[3, 1]);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::squeeze(v, &[3, 1]);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
 
 #[test]
-fn g_matmul() {
+fn matmul() {
     let mut env = ag::VariableEnvironment::new();
     let rng = ag::ndarray_ext::ArrayRng::<f64>::default();
     let v = env.slot().set(rng.standard_normal(&[2, 3]));
     env.run(|graph| {
         let a = graph.convert_to_tensor(rng.standard_normal(&[4, 2]));
         let v = graph.variable_by_id(v);
-        let z = graph.matmul(a, v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::matmul(a, v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 5e-3, graph);
     });
 }
@@ -303,8 +306,8 @@ fn batch_matmul() {
     env.run(|graph| {
         let a = graph.convert_to_tensor(rng.standard_normal(&[2, 4, 2]));
         let v = graph.variable_by_id(v);
-        let z = graph.batch_matmul(a, v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::batch_matmul(a, v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -318,7 +321,7 @@ fn implicit_broadcast() {
         let x = graph.convert_to_tensor(rng.standard_normal(&[4, 3]));
         let b = graph.variable_by_id(b);
         let z = x + b;
-        let g = graph.grad(&[z], &[b]);
+        let g = T::grad(&[z], &[b]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[b], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -333,8 +336,8 @@ fn wx_plus_b() {
         let x = graph.convert_to_tensor(rng.standard_normal(&[4, 2]));
         let w = graph.variable_by_id(w);
         let b = graph.variable_by_id(b);
-        let z = graph.matmul(x, w) + b;
-        let g = graph.grad(&[z], &[b]);
+        let z = T::matmul(x, w) + b;
+        let g = T::grad(&[z], &[b]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[b], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -345,8 +348,8 @@ fn reduce_min() {
     let v = env.slot().set(ndarray::arr2(&[[0., 1.], [3., 2.]]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.reduce_min(v, &[1], false); // keep_dims=false
-        let g = graph.grad(&[z], &[v]);
+        let z = T::reduce_min(v, &[1], false); // keep_dims=false
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -357,8 +360,8 @@ fn reduce_min_keep() {
     let v = env.slot().set(ndarray::arr2(&[[0., 1.], [3., 2.]]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.reduce_min(v, &[1], true); // keep_dims=true
-        let g = graph.grad(&[z], &[v]);
+        let z = T::reduce_min(v, &[1], true); // keep_dims=true
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -369,8 +372,8 @@ fn reduce_max() {
     let v = env.slot().set(ndarray::arr2(&[[0., 1.], [3., 2.]]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.reduce_max(v, &[1], false); // keep_dims=false
-        let g = graph.grad(&[z], &[v]);
+        let z = T::reduce_max(v, &[1], false); // keep_dims=false
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -381,8 +384,8 @@ fn reduce_max_keep() {
     let v = env.slot().set(ndarray::arr2(&[[0., 1.], [3., 2.]]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.reduce_max(v, &[1], true); // keep_dims=true
-        let g = graph.grad(&[z], &[v]);
+        let z = T::reduce_max(v, &[1], true); // keep_dims=true
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -394,8 +397,8 @@ fn reduce_mean() {
     let v = env.slot().set(rng.standard_normal(&[3, 2, 2]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.reduce_mean(v, &[1], false); // keep_dims=false
-        let g = graph.grad(&[z], &[v]);
+        let z = T::reduce_mean(v, &[1], false); // keep_dims=false
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -407,8 +410,8 @@ fn reduce_mean_keep() {
     let v = env.slot().set(rng.standard_normal(&[3, 2, 2]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.reduce_mean(v, &[1], true); // keep_dims=true
-        let g = graph.grad(&[z], &[v]);
+        let z = T::reduce_mean(v, &[1], true); // keep_dims=true
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -420,8 +423,8 @@ fn reduce_sum() {
     let v = env.slot().set(rng.standard_normal(&[3, 2, 2]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.reduce_sum(v, &[1], false); // keep_dims=false
-        let g = graph.grad(&[z], &[v]);
+        let z = T::reduce_sum(v, &[1], false); // keep_dims=false
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -433,8 +436,8 @@ fn reduce_sum_keep() {
     let v = env.slot().set(rng.standard_normal(&[3, 2, 2]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.reduce_sum(v, &[1], true); // keep_dims=true
-        let g = graph.grad(&[z], &[v]);
+        let z = T::reduce_sum(v, &[1], true); // keep_dims=true
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -446,8 +449,8 @@ fn reduce_prod() {
     let v = env.slot().set(rng.standard_normal(&[3, 2, 2]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.reduce_prod(v, &[1], false); // keep_dims=false
-        let g = graph.grad(&[z], &[v]);
+        let z = T::reduce_prod(v, &[1], false); // keep_dims=false
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -460,8 +463,8 @@ fn maximum() {
     env.run(|graph| {
         let v1 = graph.variable_by_id(v1);
         let v2 = graph.variable_by_id(v2);
-        let z = graph.maximum(v1, v2);
-        let g = graph.grad(&[z], &[v1, v2]);
+        let z = T::maximum(v1, v2);
+        let g = T::grad(&[z], &[v1, v2]);
         ag::test_helper::check_theoretical_grads(
             z,
             g.as_slice(),
@@ -482,8 +485,8 @@ fn minimum() {
     env.run(|graph| {
         let v1 = graph.variable_by_id(v1);
         let v2 = graph.variable_by_id(v2);
-        let z = graph.minimum(v1, v2);
-        let g = graph.grad(&[z], &[v1, v2]);
+        let z = T::minimum(v1, v2);
+        let g = T::grad(&[z], &[v1, v2]);
         ag::test_helper::check_theoretical_grads(
             z,
             g.as_slice(),
@@ -502,8 +505,8 @@ fn abs() {
     let v = env.slot().set(ndarray::arr1(&[1., 2., 3.]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.abs(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::abs(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -515,8 +518,8 @@ fn neg() {
     let v = env.slot().set(rng.standard_normal(&[2, 3]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.neg(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::neg(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -528,8 +531,8 @@ fn square() {
     let v = env.slot().set(rng.standard_normal(&[2, 3]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.square(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::square(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -541,8 +544,8 @@ fn reciprocal() {
     let v = env.slot().set(rng.random_uniform(&[2, 3], 1., 1.01));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.inv(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::inv(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -554,8 +557,8 @@ fn transpose() {
     let v = env.slot().set(rng.standard_normal(&[1, 2, 3, 4]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.transpose(v, &[2, 3, 0, 1]);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::transpose(v, &[2, 3, 0, 1]);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -567,9 +570,9 @@ fn reshape_after_transpose() {
     let v = env.slot().set(rng.standard_normal(&[2, 3, 4]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.transpose(v, &[2, 1, 0]);
-        let z = graph.reshape(z, &[4, 6]);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::transpose(v, &[2, 1, 0]);
+        let z = T::reshape(z, &[4, 6]);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -583,10 +586,10 @@ fn transpose_then_reshape_then_mm() {
     env.run(|graph| {
         let v = graph.variable_by_id(v);
         let v2 = graph.variable_by_id(v2);
-        let z = graph.transpose(v, &[4, 2, 3, 0, 1]);
-        let z = graph.reshape(z, &[15, 8]);
-        let z = graph.matmul(z, v2);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::transpose(v, &[4, 2, 3, 0, 1]);
+        let z = T::reshape(z, &[15, 8]);
+        let z = T::matmul(z, v2);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -601,7 +604,7 @@ fn add() {
         let a = graph.variable_by_id(a);
         let b = graph.variable_by_id(b);
         let z = a + b;
-        let g = graph.grad(&[z], &[a, b]);
+        let g = T::grad(&[z], &[a, b]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[a], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -616,7 +619,7 @@ fn mul() {
         let a = graph.variable_by_id(a);
         let b = graph.variable_by_id(b);
         let z = a * b;
-        let g = graph.grad(&[z], &[a, b]);
+        let g = T::grad(&[z], &[a, b]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[a], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -628,8 +631,8 @@ fn sigmoid() {
     let v = env.slot().set(rng.standard_normal(&[2, 2]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.sigmoid(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::sigmoid(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -641,8 +644,8 @@ fn elu() {
     let v = env.slot().set(rng.standard_normal(&[2, 2]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.elu(v, 1.);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::elu(v, 1.);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -653,8 +656,8 @@ fn relu() {
     let v = env.slot().set(ag::ndarray::arr1(&[0.2, 0.5]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.relu(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::relu(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -666,8 +669,8 @@ fn softplus() {
     let v = env.slot().set(rng.standard_normal(&[2, 2]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.softplus(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::softplus(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -679,8 +682,8 @@ fn logsumexp() {
     let v = env.slot().set(rng.standard_normal(&[2, 3]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.reduce_logsumexp(v, 1, true);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::reduce_logsumexp(v, 1, true);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -692,8 +695,8 @@ fn log_softmax() {
     let v = env.slot().set(rng.standard_normal(&[1, 3]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.log_softmax(v, 1);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::log_softmax(v, 1);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -706,8 +709,8 @@ fn softmax_cross_entropy() {
     env.run(|graph| {
         let t = graph.convert_to_tensor(ndarray::arr2(&[[1., 0., 0.]]));
         let v = graph.variable_by_id(v);
-        let z = graph.softmax_cross_entropy(v, t);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::softmax_cross_entropy(v, t);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -720,8 +723,8 @@ fn sigmoid_cross_entropy() {
     env.run(|graph| {
         let t = graph.convert_to_tensor(rng.standard_normal(&[1, 3]));
         let v = graph.variable_by_id(v);
-        let z = graph.sigmoid_cross_entropy(v, t);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::sigmoid_cross_entropy(v, t);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -734,8 +737,8 @@ fn sparse_softmax_cross_entropy() {
     env.run(|graph| {
         let t = graph.convert_to_tensor(ndarray::arr1(&[1., 0.]));
         let v = graph.variable_by_id(v);
-        let z = graph.sparse_softmax_cross_entropy(v, t);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::sparse_softmax_cross_entropy(v, t);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -748,8 +751,8 @@ fn gather() {
     env.run(|graph| {
         let v = graph.variable_by_id(v);
         let x = graph.convert_to_tensor(ndarray::arr2(&[[5., 4., 3.], [2., 1., 0.]]));
-        let z = graph.gather(v, x, 2);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::gather(v, x, 2);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -763,8 +766,8 @@ fn concat() {
     env.run(|graph| {
         let v1 = graph.variable_by_id(v1);
         let v2 = graph.variable_by_id(v2);
-        let z = graph.concat(&[v1, v2], 1);
-        let g = graph.grad(&[z], &[v1]);
+        let z = T::concat(&[v1, v2], 1);
+        let g = T::grad(&[z], &[v1]);
         ag::test_helper::check_theoretical_grads(
             z,
             g.as_slice(),
@@ -784,8 +787,8 @@ fn slice() {
     let v = env.slot().set(rng.standard_normal(&[4, 4]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.slice(v, &[0, 0], &[-1, 2]); // numpy equivalent is v[:, 0:2]
-        let g = graph.grad(&[z], &[v]);
+        let z = T::slice(v, &[0, 0], &[-1, 2]); // numpy equivalent is v[:, 0:2]
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -797,8 +800,8 @@ fn split() {
     let v = env.slot().set(rng.standard_normal(&[3, 7, 5]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.split(v, &[2, 3, 2], 1);
-        let g = graph.grad(&[&z[1]], &[v]);
+        let z = T::split(v, &[2, 3, 2], 1);
+        let g = T::grad(&[&z[1]], &[v]);
         ag::test_helper::check_theoretical_grads(z[1], g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -810,8 +813,8 @@ fn flatten() {
     let v = env.slot().set(rng.standard_normal(&[4, 4]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.flatten(v);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::flatten(v);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -823,8 +826,8 @@ fn reshape() {
     let v = env.slot().set(rng.standard_normal(&[4, 4]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.reshape(v, &[4, 2, 2]);
-        let g = graph.grad(&[z], &[v]);
+        let z = T::reshape(v, &[4, 2, 2]);
+        let g = T::grad(&[z], &[v]);
         ag::test_helper::check_theoretical_grads(z, g.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -837,9 +840,9 @@ fn reshape_grad() {
     let v = env.slot().set(rng.standard_normal(&[4, 4]));
     env.run(|graph| {
         let v = graph.variable_by_id(v);
-        let z = graph.reshape(&(v), &[4, 2, 2]);
-        let g = graph.grad(&[z], &[v])[0];
-        let gg = graph.grad(&[g], &[v]);
+        let z = T::reshape(&(v), &[4, 2, 2]);
+        let g = T::grad(&[z], &[v])[0];
+        let gg = T::grad(&[g], &[v]);
         ag::test_helper::check_theoretical_grads(g, gg.as_slice(), &[v], &[], 1e-3, 1e-3, graph);
     });
 }
@@ -853,8 +856,8 @@ fn conv2d_transpose() {
     env.run(|graph| {
         let x = graph.variable_by_id(x);
         let w = graph.variable_by_id(w);
-        let y = graph.conv2d_transpose(x, w, 0, 1);
-        let g = graph.grad(&[y], &[w]);
+        let y = T::conv2d_transpose(x, w, 0, 1);
+        let g = T::grad(&[y], &[w]);
         ag::test_helper::check_theoretical_grads(y, &g, &[w], &[], 1e-3, 1e-2, graph);
     });
 }
@@ -869,9 +872,9 @@ fn conv2d_transpose_filter_grad() {
     env.run(|graph| {
         let x = graph.variable_by_id(x);
         let w = graph.variable_by_id(w);
-        let y = graph.conv2d_transpose(x, w, 0, 1);
-        let g = graph.grad(&[y], &[w])[0];
-        let gg = graph.grad(&[g], &[w]);
+        let y = T::conv2d_transpose(x, w, 0, 1);
+        let g = T::grad(&[y], &[w])[0];
+        let gg = T::grad(&[g], &[w]);
         ag::test_helper::check_theoretical_grads(g, &gg, &[w], &[], 1e-3, 1e-2, graph);
     });
 }
@@ -886,9 +889,9 @@ fn conv2d_filter_grad() {
     env.run(|graph| {
         let x = graph.variable_by_id(x);
         let w = graph.variable_by_id(w);
-        let y = graph.conv2d(x, w, 0, 1);
-        let g = graph.grad(&[y], &[w])[0];
-        let gg = graph.grad(&[g], &[w]);
+        let y = T::conv2d(x, w, 0, 1);
+        let g = T::grad(&[y], &[w])[0];
+        let gg = T::grad(&[g], &[w]);
         ag::test_helper::check_theoretical_grads(g, &gg, &[w], &[], 1e-3, 1e-2, graph);
     });
 }
@@ -903,11 +906,11 @@ fn conv2d_grad() {
     env.run(|graph| {
         let x = graph.variable_by_id(x);
         let w = graph.variable_by_id(w);
-        let y = graph.conv2d(x, w, 0, 1);
+        let y = T::conv2d(x, w, 0, 1);
         let gy = graph.variable_by_id(gy);
         unsafe {
-            let g = graph.grad_with_default(&[y], &[x], &[gy])[0];
-            let gg = graph.grad(&[g], &[gy])[0];
+            let g = T::grad_with_default(&[y], &[x], &[gy])[0];
+            let gg = T::grad(&[g], &[gy])[0];
             ag::test_helper::check_theoretical_grads(g, &[gg], &[gy], &[], 1e-3, 1e-2, graph);
         }
     });
@@ -922,9 +925,9 @@ fn conv2d_xw_grad() {
     env.run(|graph| {
         let x = graph.variable_by_id(x);
         let w = graph.variable_by_id(w);
-        let y = graph.conv2d(x, w, 0, 1);
-        let g = graph.grad(&[y], &[w])[0];
-        let gg = graph.grad(&[g], &[x]);
+        let y = T::conv2d(x, w, 0, 1);
+        let g = T::grad(&[y], &[w])[0];
+        let gg = T::grad(&[g], &[x]);
         ag::test_helper::check_theoretical_grads(g, &gg, &[x], &[], 1e-3, 1e-2, graph);
     });
 }
@@ -939,9 +942,9 @@ fn conv2d_x_grad() {
     env.run(|graph| {
         let x = graph.variable_by_id(x);
         let w = graph.variable_by_id(w);
-        let y = graph.conv2d(x, w, 0, 1);
-        let g = graph.grad(&[y], &[x])[0];
-        let gg = graph.grad(&[g], &[x]); // can't differentiate with x twice
+        let y = T::conv2d(x, w, 0, 1);
+        let g = T::grad(&[y], &[x])[0];
+        let gg = T::grad(&[g], &[x]); // can't differentiate with x twice
         ag::test_helper::check_theoretical_grads(y, &gg, &[x], &[], 1e-3, 1e-2, graph);
     });
 }
@@ -955,8 +958,8 @@ fn conv2d() {
     env.run(|graph| {
         let x = graph.variable_by_id(x);
         let w = graph.variable_by_id(w);
-        let y = graph.conv2d(x, w, 1, 2);
-        let g = graph.grad(&[y], &[x, w]);
+        let y = T::conv2d(x, w, 1, 2);
+        let g = T::grad(&[y], &[x, w]);
         ag::test_helper::check_theoretical_grads(y, &g, &[x, w], &[], 1e-3, 1e-2, graph);
     });
 }
@@ -967,8 +970,8 @@ fn max_pool2d() {
     let x = env.slot().set(ndarray::Array::linspace(0., 1., 9));
     env.run(|graph| {
         let x = graph.variable_by_id(x);
-        let y = graph.max_pool2d(graph.reshape(x, &[1, 1, 3, 3]), 2, 0, 1);
-        let g = graph.grad(&[y], &[x]);
+        let y = T::max_pool2d(T::reshape(x, &[1, 1, 3, 3]), 2, 0, 1);
+        let g = T::grad(&[y], &[x]);
         ag::test_helper::check_theoretical_grads(y, &g, &[x], &[], 1e-3, 1e-2, graph);
     });
 }
@@ -984,11 +987,11 @@ fn max_pool2d_grad() {
     );
     env.run(|graph| {
         let x = graph.variable_by_id(x);
-        let y = graph.max_pool2d(graph.reshape(x, &[2, 2, 3, 3]), 2, 0, 1);
+        let y = T::max_pool2d(T::reshape(x, &[2, 2, 3, 3]), 2, 0, 1);
         let gy = graph.variable_by_id(gy);
         unsafe {
-            let g = graph.grad_with_default(&[y], &[x], &[gy])[0];
-            let gg = graph.grad(&[g], &[gy])[0];
+            let g = T::grad_with_default(&[y], &[x], &[gy])[0];
+            let gg = T::grad(&[g], &[gy])[0];
             ag::test_helper::check_theoretical_grads(g, &[gg], &[gy], &[], 1e-3, 1e-2, graph);
         }
     });
@@ -1002,8 +1005,8 @@ fn tensordot() {
     env.run(|graph| {
         let a = graph.variable_by_id(a);
         let b = graph.convert_to_tensor(rng.standard_normal(&[4, 3, 2]));
-        let c = graph.tensordot(a, b, &[1, 0], &[0, 1]);
-        let g = graph.grad(&[c], &[a]);
+        let c = T::tensordot(a, b, &[1, 0], &[0, 1]);
+        let g = T::grad(&[c], &[a]);
         ag::test_helper::check_theoretical_grads(c, &g, &[a], &[], 1e-3, 1e-2, graph);
     });
 }
@@ -1035,15 +1038,15 @@ fn primitive_back_propagation_through_time() {
 
         for i in 0..max_sent {
             // pick new word id
-            let id = graph.squeeze(graph.slice(sentences, &[0, i], &[-1, i + 1]), &[-1]);
+            let id = T::squeeze(T::slice(sentences, &[0, i], &[-1, i + 1]), &[-1]);
 
             let new_h = {
                 // recall last h
                 let last_h = h_buf.last().unwrap();
                 // compute and accumulate `loss`
-                loss_buf.push(graph.sparse_softmax_cross_entropy(&graph.matmul(last_h, wo), &id));
+                loss_buf.push(T::sparse_softmax_cross_entropy(&T::matmul(last_h, wo), &id));
                 // new `h`
-                graph.tanh(&(graph.gather(&lookup_table, &id, 0) + graph.matmul(last_h, wh)))
+                T::tanh(&(T::gather(&lookup_table, &id, 0) + T::matmul(last_h, wh)))
             };
 
             h_buf.push(new_h);
@@ -1053,7 +1056,7 @@ fn primitive_back_propagation_through_time() {
 
         // inputs (batch_size=2, sentence_len=4)
         let params = &[lookup_table, wo, wh];
-        let g = graph.grad(&[loss], params);
+        let g = T::grad(&[loss], params);
         ag::test_helper::check_theoretical_grads(
             loss,
             g.as_slice(),

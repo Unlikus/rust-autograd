@@ -5,6 +5,7 @@ use ag::optimizers::adam;
 use ag::rand::seq::SliceRandom;
 use ag::variable::NamespaceTrait;
 use ag::{ndarray_ext as array, Graph};
+use ag::tensor_ops as T;
 use ndarray::s;
 use std::ops::Deref;
 use std::time::Instant;
@@ -51,11 +52,11 @@ fn main() {
 
     let rng = ag::ndarray_ext::ArrayRng::<f32>::default();
 
-    let mut ctx = ag::VariableEnvironment::new();
-    let w = ctx.slot().set(rng.glorot_uniform(&[28 * 28, 10]));
-    let b = ctx.slot().set(array::zeros(&[1, 10]));
+    let mut env = ag::VariableEnvironment::new();
+    let w = env.slot().set(rng.glorot_uniform(&[28 * 28, 10]));
+    let b = env.slot().set(array::zeros(&[1, 10]));
 
-    let adam = adam::Adam::default("adam", ctx.default_namespace().current_var_ids(), &mut ctx);
+    let adam = adam::Adam::default("adam", env.default_namespace().current_var_ids(), &mut env);
 
     let max_epoch = 3;
     let batch_size = 200isize;
@@ -69,14 +70,14 @@ fn main() {
                 let x_batch = x_train.slice(s![i..i + batch_size, ..]).into_dyn();
                 let y_batch = y_train.slice(s![i..i + batch_size, ..]).into_dyn();
 
-                ctx.run(|g| {
+                env.run(|g| {
                     let w = g.variable_by_id(w);
                     let b = g.variable_by_id(b);
                     let (x, y) = inputs(g.deref());
-                    let z = g.matmul(x, w) + b;
-                    let loss = g.sparse_softmax_cross_entropy(z, &y);
-                    let mean_loss = g.reduce_mean(loss, &[0], false);
-                    let grads = &g.grad(&[&mean_loss], &[w, b]);
+                    let z = T::matmul(x, w) + b;
+                    let loss = T::sparse_softmax_cross_entropy(z, &y);
+                    let mean_loss = T::reduce_mean(loss, &[0], false);
+                    let grads = &T::grad(&[&mean_loss], &[w, b]);
                     let update_ops: &[Tensor] = &adam.update(&[w, b], grads, g);
                     // let update_ops: &[Tensor] = &sgd.update(&[w, b], grads, g);
                     g.eval(update_ops, &[x.given(x_batch), y.given(y_batch)]);
@@ -86,15 +87,15 @@ fn main() {
         println!("finish epoch {}", epoch);
     }
 
-    ctx.run(|g| {
+    env.run(|g| {
         let w = g.variable_by_id(w);
         let b = g.variable_by_id(b);
         let (x, y) = inputs(g.deref());
 
         // -- test --
-        let z = g.matmul(x, w) + b;
-        let predictions = g.argmax(z, -1, true);
-        let accuracy = g.reduce_mean(&g.equal(predictions, &y), &[0, 1], false);
+        let z = T::matmul(x, w) + b;
+        let predictions = T::argmax(z, -1, true);
+        let accuracy = T::reduce_mean(&T::equal(predictions, &y), &[0, 1], false);
         println!(
             "test accuracy: {:?}",
             accuracy.eval(&[x.given(x_test.view()), y.given(y_test.view())], g)

@@ -1,6 +1,7 @@
 use super::*;
 use ndarray::IxDyn;
 use std::slice;
+use crate::tensor_ops::*;
 
 pub struct Conv2D {
     pub pad: usize,
@@ -563,7 +564,6 @@ impl<T: Float> crate::op::Op<T> for Conv2D {
             .append_input(&gy, false)
             .append_input(&w, false)
             .build(
-                s,
                 super::conv2d_transpose::Conv2DTranspose {
                     pad: self.pad,
                     stride: self.stride,
@@ -571,7 +571,7 @@ impl<T: Float> crate::op::Op<T> for Conv2D {
                 },
             );
 
-        let cols = s.nth_tensor(y, 1);
+        let cols = nth_tensor(y, 1);
         let gw = Tensor::builder(ctx.graph())
             .append_input(&cols, false)
             .append_input(&gy, false)
@@ -579,7 +579,6 @@ impl<T: Float> crate::op::Op<T> for Conv2D {
             .append_backprop_input(&x)
             .append_backprop_input(&gy)
             .build(
-                s,
                 Conv2DFilterGrad {
                     pad: self.pad,
                     stride: self.stride,
@@ -613,7 +612,6 @@ impl<T: Float> crate::op::Op<T> for Conv2DWithCols {
             .append_input(&gy, false)
             .append_input(&w, false)
             .build(
-                s,
                 super::conv2d_transpose::Conv2DTranspose {
                     pad: self.pad,
                     stride: self.stride,
@@ -628,7 +626,6 @@ impl<T: Float> crate::op::Op<T> for Conv2DWithCols {
             .append_backprop_input(&y.get_backprop_input(0))
             .append_backprop_input(&gy)
             .build(
-                s,
                 Conv2DFilterGrad {
                     pad: self.pad,
                     stride: self.stride,
@@ -768,7 +765,6 @@ impl<T: Float> crate::op::Op<T> for Conv2DFilterGrad {
             .append_input(&gy, false)
             .append_input(&ggw, false)
             .build(
-                s,
                 super::conv2d_transpose::Conv2DTranspose {
                     pad: self.pad,
                     stride: self.stride,
@@ -782,7 +778,6 @@ impl<T: Float> crate::op::Op<T> for Conv2DFilterGrad {
             .append_backprop_input(&y.get_backprop_input(0))
             .append_backprop_input(&ggw)
             .build(
-                s,
                 Conv2DWithCols {
                     pad: self.pad,
                     stride: self.stride,

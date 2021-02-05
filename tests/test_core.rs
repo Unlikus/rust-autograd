@@ -1,6 +1,7 @@
 extern crate autograd as ag;
 extern crate ndarray;
 
+use ag::tensor_ops as T;
 use ag::NdArray;
 
 struct MultiOutputOp;
@@ -28,9 +29,9 @@ impl ag::op::Op<f32> for MultiOutputOp {
 fn test_nth_tensor() {
     let mut ctx = ag::VariableEnvironment::new();
     ctx.run(|g| {
-        let a = ag::Tensor::builder(g).build(g, MultiOutputOp);
-        let b = g.nth_tensor(a, 1);
-        let c = g.exp(b);
+        let a = ag::Tensor::builder(g).build(MultiOutputOp);
+        let b = T::nth_tensor(a, 1);
+        let c = T::exp(b);
         g.eval(&[c], &[]);
     });
 }
@@ -41,7 +42,7 @@ fn test_hook() {
     ctx.run(|g| {
         let a: ag::Tensor<f64> = g.ones(&[4, 2]).show();
         let b: ag::Tensor<f64> = g.zeros(&[2, 3]).show_shape();
-        let c = g.matmul(a, b).print("aaa");
+        let c = T::matmul(a, b).print("aaa");
         g.eval(&[c], &[]);
     });
     ctx.run(|g| {
@@ -50,15 +51,15 @@ fn test_hook() {
         let z = 2. * x * x + 3. * y + 1.;
 
         // dz/dy
-        let gy = &g.grad(&[z], &[y])[0];
+        let gy = &T::grad(&[z], &[y])[0];
         println!("{:?}", gy.eval(&[], g)); // => Some(3.)
 
         // dz/dx (requires to fill the placeholder `x`)
-        let gx = &g.grad(&[z], &[x])[0];
+        let gx = &T::grad(&[z], &[x])[0];
         println!("{:?}", gx.eval(&[x.given(ag::ndarray::arr0(2.).view())], g)); // => Some(8.)
 
         // ddz/dx (differentiates `z` again)
-        let ggx = &g.grad(&[gx], &[x])[0];
+        let ggx = &T::grad(&[gx], &[x])[0];
         println!("{:?}", ggx.eval(&[], g)); // => Some(4.)
     });
 }
@@ -70,7 +71,7 @@ fn test_many_nodes() {
         for _ in 0..10000 {
             let x = g.placeholder(&[3]);
             let z = 2.0 * x / 2.0 / 2.0;
-            g.grad(&[z], &[x])[0];
+            T::grad(&[z], &[x])[0];
         }
     });
 }
@@ -82,7 +83,7 @@ fn owned_and_borrowed_array_at_runtime() {
         let x: ag::Tensor<f32> = g.ones(&[6]);
         let y: ag::Tensor<f32> = g.ones(&[6]);
         let mut k = x + y;
-        let z = g.reshape(x, &[2, 3]);
+        let z = T::reshape(x, &[2, 3]);
         for _ in 0..10000 {
             k = k + y;
         }

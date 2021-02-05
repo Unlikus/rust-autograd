@@ -1,6 +1,8 @@
 extern crate autograd as ag;
 extern crate ndarray;
 
+use ag::tensor_ops as T;
+
 #[test]
 fn scalar_add() {
     let mut ctx = ag::VariableEnvironment::new();
@@ -45,7 +47,7 @@ fn slice() {
     let mut ctx = ag::VariableEnvironment::new();
     ctx.run(|g| {
         let ref a: ag::Tensor<f32> = g.zeros(&[4, 4]);
-        let ref b = g.slice(a, &[0, 0], &[-1, 2]); // numpy equivalent is a[:, 0:2]
+        let ref b = T::slice(a, &[0, 0], &[-1, 2]); // numpy equivalent is a[:, 0:2]
         assert_eq!(b.eval(&[], g).unwrap().shape(), &[4, 2]);
     });
 }
@@ -55,10 +57,10 @@ fn slice_negative() {
     let mut ctx = ag::VariableEnvironment::new();
     ctx.run(|g| {
         let ref a: ag::Tensor<f32> = g.zeros(&[4, 4]);
-        let ref b = g.slice(a, &[0, 0], &[-2, 2]); // numpy equivalent is a[:-1, :2]
+        let ref b = T::slice(a, &[0, 0], &[-2, 2]); // numpy equivalent is a[:-1, :2]
         assert_eq!(b.eval(&[], g).unwrap().shape(), &[3, 2]);
 
-        let ref b = g.slice(a, &[0, 0], &[-3, 2]); // numpy equivalent is a[:-1, :2]
+        let ref b = T::slice(a, &[0, 0], &[-3, 2]); // numpy equivalent is a[:-1, :2]
         assert_eq!(b.eval(&[], g).unwrap().shape(), &[2, 2]);
     });
 }

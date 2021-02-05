@@ -6,6 +6,7 @@ use ag::EvalError::OpError;
 use ag::{EvalError, NdArray};
 use ndarray::array;
 use std::env::var;
+use ag::tensor_ops as T;
 
 type Tensor<'g> = ag::Tensor<'g, f32>;
 
@@ -52,10 +53,10 @@ fn test_adam() {
         let y = g.convert_to_tensor(array![1., 0.]).show();
         let w = g.variable_by_id(w);
         let b = g.variable_by_id(b);
-        let z = g.matmul(x, w) + b;
-        let loss = g.sparse_softmax_cross_entropy(z, &y);
-        let mean_loss = g.reduce_mean(loss, &[0], false);
-        let grads = &g.grad(&[&mean_loss], &[w, b]);
+        let z = T::matmul(x, w) + b;
+        let loss = T::sparse_softmax_cross_entropy(z, &y);
+        let mean_loss = T::reduce_mean(loss, &[0], false);
+        let grads = &T::grad(&[&mean_loss], &[w, b]);
         let update_ops: &[Tensor] = &adam.update(&[w, b], grads, g);
         let updates = g.eval(update_ops, &[]);
         updates[0].as_ref().unwrap();
@@ -81,7 +82,7 @@ fn buggy() {
         let v = graph.variable_by_id(v);
 
         let y = c * v;
-        let grads = graph.grad(&[y], &[v]);
+        let grads = T::grad(&[y], &[v]);
 
         let updates = adam.update(&[v], &grads, graph);
         for a in updates {

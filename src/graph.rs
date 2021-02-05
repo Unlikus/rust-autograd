@@ -1,42 +1,45 @@
 //! Defining things related to `ag::Graph`.
 
-use crate::variable::VariableID;
-use crate::variable::{FullName, NamespaceTrait};
-use crate::{tensor::Tensor, tensor::TensorInternal, Float, FxHashMap, VariableEnvironment};
+
+use crate::variable::{VarArrayID, FullName, NamespaceTrait, VariableNamespace};
+use crate::tensor::{Tensor, TensorInternal};
+use crate::{Float, FxHashMap, VariableEnvironment};
 use smallvec::alloc::borrow::Cow;
 use std::fmt;
 use std::ops::Deref;
-use std::{cell::RefCell, cell::UnsafeCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap};
+use std::cell::{Ref, RefMut};
+use crate::op::Op;
 
 type TensorID = usize;
 
 pub struct GraphRepr<F: Float> {
-    pub(crate) node_set: UnsafeCell<Vec<TensorInternal<F>>>,
-    pub(crate) variable2node: RefCell<FxHashMap<VariableID, TensorID>>,
+    pub(crate) node_set: RefCell<Vec<TensorInternal<F>>>,
+    pub(crate) variable2node: RefCell<FxHashMap<VarArrayID, TensorID>>,
 }
 
-impl<'t, 'g, 'e, F: Float> GraphRepr<F> {
+impl<'t, 'g, F: Float> GraphRepr<F> {
     #[inline]
     pub(crate) fn install(&'g self, mut node: TensorInternal<F>) -> TensorID {
-        unsafe {
-            let inner = &mut *self.node_set.get();
-            let id = inner.len();
-            node.id = id;
-            inner.push(node);
-            id
-        }
+        let mut inner = self.node_set.borrow_mut();
+        let id = inner.len();
+        node.id = id;
+        inner.push(node);
+        id
+    }
+
+    #[inline(always)]
+    // `i` must be an id returned by Graph::install
+    pub(crate) fn access_inner(&self, i: TensorID) -> Ref<TensorInternal<F>> {
+        let borrow = self.node_set.borrow();
+        Ref::map(borrow, |t| &t[i])
     }
 
     // `i` must be an id returned by Graph::install
     #[inline(always)]
-    pub(crate) unsafe fn access_inner(&self, i: TensorID) -> &'t TensorInternal<F> {
-        &(*self.node_set.get())[i]
-    }
-
-    // `i` must be an id returned by Graph::install
-    #[inline(always)]
-    pub(crate) unsafe fn access_inner_mut(&self, i: TensorID) -> &'t mut TensorInternal<F> {
-        &mut (*self.node_set.get())[i]
+    pub(crate) fn access_inner_mut(&self, i: TensorID) -> RefMut<TensorInternal<F>> {
+        let borrow = self.node_set.borrow_mut();
+        RefMut::map(borrow, |t| &mut t[i])
     }
 
     #[inline(always)]
@@ -45,7 +48,7 @@ impl<'t, 'g, 'e, F: Float> GraphRepr<F> {
     }
 
     #[inline]
-    pub fn variable_by_id(&'g self, vid: VariableID) -> Tensor<'g, F> {
+    pub fn variable_by_id(&'g self, vid: VarArrayID) -> Tensor<'g, F> {
         let tid = {
             let temp = self.variable2node.borrow();
             temp.get(&vid).cloned()
@@ -57,7 +60,7 @@ impl<'t, 'g, 'e, F: Float> GraphRepr<F> {
             // allocate new tensor
             let allocated = Tensor::builder(self)
                 .set_variable(vid)
-                .build(self, crate::ops::basic_source_ops::Variable);
+                .build(crate::tensor_ops::basic_source_ops::Variable);
             // register vid -> tid map
             self.variable2node.borrow_mut().insert(vid, allocated.id);
             allocated
@@ -71,7 +74,7 @@ impl<'t, 'g, 'e, F: Float> GraphRepr<F> {
         namespace: &impl NamespaceTrait<F>,
     ) -> Tensor<F> {
         let full_name = &FullName::new(namespace.name(), Cow::Borrowed(name.as_ref()));
-        if let Some(&vid) = namespace.env().variable_map.get(full_name) {
+        if let Some(&vid) = namespace.env().name_to_id.get(full_name) {
             // find VariableID
             self.variable_by_id(vid)
         } else {
@@ -87,52 +90,46 @@ impl<'t, 'g, 'e, F: Float> GraphRepr<F> {
         }
     }
 
-    pub fn variable_map_by_id(
+    /// Returns a map of `Tensor`s associated with the ids.
+    ///
+    /// See `VariableEnvironment` for the usages.
+    pub fn var_tensors_by_id<'e: 'g>(
         &'g self,
-        ctx: &'g VariableEnvironment<F>,
-    ) -> HashMap<VariableID, Tensor<'g, F>> {
-        (0..ctx.variable_vec.len())
-            .map(|vid| (vid.into(), self.variable_by_id(vid.into())))
-            .collect()
+        env: &'e VariableEnvironment<F>,
+    ) -> impl Iterator<Item=(VarArrayID, Tensor<'g, F>)> {
+        (0..env.array_list.len())
+            .map(move |vid| (vid.into(), self.variable_by_id(vid.into())))
     }
 
-    pub fn variable_map_by_name(
+    /// Returns a map of `Tensor`s associated with the names in the specified namespace.
+    ///
+    /// See `VariableEnvironment` for the usages.
+    pub fn var_tensors_by_name<'e: 'name + 'g, 'name>(
         &'g self,
-        ns: &'g impl NamespaceTrait<F>,
-    ) -> HashMap<&str, Tensor<'g, F>> {
-        // reduce to target namespace
-        let var_id_list = ns
-            .env()
-            .variable_map
+        ns: &'name VariableNamespace<'e, 'name, F>,
+    ) -> impl Iterator<Item=(&'name str, Tensor<'g, F>)> {
+        ns.env()
+            .name_to_id
             .iter()
-            .filter_map(|ent| {
+            .filter_map(move |ent| {
                 // filter out other namespaces
-                if &ent.0.namespace_name == ns.name() {
-                    Some((*ent.1, ent.0.variable_name.as_ref()))
+                if &ent.0.namespace_id == ns.name() {
+                    Some((ent.0.variable_name.deref(), self.variable_by_id(*ent.1)))
                 } else {
                     None
                 }
             })
-            .collect::<Vec<_>>();
-
-        // resolve
-        var_id_list
-            .into_iter()
-            .map(|(vid, name)| (name, self.variable_by_id(vid)))
-            .collect()
     }
 }
 
 impl<T: Float> fmt::Debug for GraphRepr<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        unsafe {
-            let set = &*self.node_set.get();
-            let mut buf = format!("graph size: {}\n", set.len());
-            for node in set {
-                buf += format!("{}\n", node).as_str();
-            }
-            write!(f, "{}", buf)
+        let set = &*self.node_set.borrow();
+        let mut buf = format!("graph size: {}\n", set.len());
+        for node in set {
+            buf += format!("{}\n", node).as_str();
         }
+        write!(f, "{}", buf)
     }
 }
 
@@ -142,6 +139,7 @@ impl<T: Float> fmt::Debug for GraphRepr<T> {
 /// ```
 /// use autograd as ag;
 /// use ag::ndarray;
+/// use ag::tensor_ops as T;
 ///
 /// let grad = ag::run(|graph| {
 ///     let x = graph.placeholder(&[]);
@@ -149,7 +147,7 @@ impl<T: Float> fmt::Debug for GraphRepr<T> {
 ///     let z = 2.*x*x + 3.*y + 1.;
 ///
 ///     // dz/dx (symbolic):
-///     let grad = &graph.grad(&[z], &[x])[0];
+///     let grad = &T::grad(&[z], &[x])[0];
 ///
 ///     // Evaluate dz/dx when x=3:
 ///     grad.eval(&[x.given(ndarray::arr0(3.0).view())], graph).unwrap()
@@ -163,7 +161,7 @@ where
 {
     let env_handle = &mut VariableEnvironment::new();
     let graph_internal = GraphRepr {
-        node_set: UnsafeCell::new(Vec::with_capacity(512)),
+        node_set: RefCell::new(Vec::with_capacity(512)),
         variable2node: RefCell::new(FxHashMap::default()),
     };
     let mut g = Graph {
@@ -194,20 +192,26 @@ pub struct Graph<'env, 'name, F: Float> {
 }
 
 impl<'env, 'name, F: Float> Graph<'env, 'name, F> {
-    /// Returns the current VariableEnvironment
+    /// Returns a reference of the current VariableEnvironment
     #[inline]
     pub fn env(&self) -> &VariableEnvironment<F> {
         self.env_handle
     }
 
-    /// Get or create a Tensor associated with the given `VariableID`.
+    /// Returns a mutable reference of the current VariableEnvironment
     #[inline]
-    pub fn variable_by_id(&self, vid: VariableID) -> Tensor<F> {
+    pub fn env_mut(&mut self) -> &mut VariableEnvironment<'name, F> {
+        self.env_handle
+    }
+
+    /// Get or create a Tensor associated with the given `VarArrayID`.
+    #[inline]
+    pub fn variable_by_id(&self, vid: VarArrayID) -> Tensor<F> {
         self.inner.variable_by_id(vid)
     }
 
     #[inline]
-    pub(crate) fn internal(&self) -> &GraphRepr<F> {
+    pub(crate) fn inner(&self) -> &GraphRepr<F> {
         &self.inner
     }
 }
@@ -259,3 +263,4 @@ fn test_mixed_graph() {
         });
     });
 }
+

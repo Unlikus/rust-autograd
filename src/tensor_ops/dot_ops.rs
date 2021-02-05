@@ -1,7 +1,7 @@
 /// Some gemm kernel usages are ported from ndarray
 use crate::ndarray_ext::NdArray;
 #[cfg(feature = "blas")]
-use crate::ops::blas_ffi::*;
+use crate::tensor_ops::blas_ffi::*;
 use crate::same_type;
 use crate::tensor::Tensor;
 use crate::Float;
@@ -612,7 +612,6 @@ impl<T: Float> op::Op<T> for MatMul {
             .append_input(gy, false)
             .append_input(&ctx.input(1), false)
             .build(
-                s,
                 MatMul {
                     transpose_a: false,
                     transpose_b: true,
@@ -623,7 +622,6 @@ impl<T: Float> op::Op<T> for MatMul {
             .append_input(&ctx.input(0), false)
             .append_input(gy, false)
             .build(
-                s,
                 MatMul {
                     transpose_a: true,
                     transpose_b: false,
@@ -707,7 +705,6 @@ impl<T: Float> op::Op<T> for BatchMatMul {
             .append_input(gy, false)
             .append_input(&ctx.input(1), false)
             .build(
-                ctx.graph(),
                 BatchMatMul {
                     transpose_a: false,
                     transpose_b: true,
@@ -718,7 +715,6 @@ impl<T: Float> op::Op<T> for BatchMatMul {
             .append_input(&ctx.input(0), false)
             .append_input(gy, false)
             .build(
-                ctx.graph(),
                 BatchMatMul {
                     transpose_a: true,
                     transpose_b: false,

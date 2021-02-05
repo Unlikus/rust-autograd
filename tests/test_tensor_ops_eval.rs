@@ -3,6 +3,7 @@ extern crate ndarray;
 use self::ag::NdArray;
 use ag::VariableEnvironment;
 use ndarray::array;
+use ag::tensor_ops as T;
 
 #[test]
 fn reduce_prod() {
@@ -10,7 +11,7 @@ fn reduce_prod() {
     env.run(|g| {
         let rng = ag::ndarray_ext::ArrayRng::<f64>::default();
         let v = g.convert_to_tensor(rng.standard_normal(&[3, 2]));
-        let z = g.reduce_prod(v, &[0, 1], false); // keep_dims=false
+        let z = T::reduce_prod(v, &[0, 1], false); // keep_dims=false
         let empty_shape: &[usize] = &[];
         assert_eq!(z.eval(&[], g).unwrap().shape(), empty_shape);
     });
@@ -21,7 +22,7 @@ fn argmax() {
     let mut env = VariableEnvironment::new();
     env.run(|g| {
         let x = g.convert_to_tensor(array![[3., 4.], [5., 6.]]);
-        let y = g.argmax(x, -1, false);
+        let y = T::argmax(x, -1, false);
         assert_eq!(y.eval(&[], g), Ok(ndarray::arr1(&[1., 1.]).into_dyn()));
     });
 }
@@ -31,7 +32,7 @@ fn argmax_with_multi_max_args() {
     let mut env = VariableEnvironment::new();
     env.run(|g| {
         let x = g.convert_to_tensor(array![1., 2., 3., 3.]);
-        let y = g.argmax(x, 0, false);
+        let y = T::argmax(x, 0, false);
         assert_eq!(2., y.eval(&[], g).unwrap()[ndarray::IxDyn(&[])]);
     });
 }
@@ -42,7 +43,7 @@ fn reduce_mean() {
     let v = env.slot().set(array![2., 3., 4.]);
     env.run(|g| {
         let v = g.variable_by_id(v);
-        let z = g.reduce_mean(v, &[0], false); // keep_dims=false
+        let z = T::reduce_mean(v, &[0], false); // keep_dims=false
         assert_eq!(3., z.eval(&[], g).unwrap()[ndarray::IxDyn(&[])]);
     });
 }
@@ -53,8 +54,8 @@ fn reduce_grad() {
     let v = env.slot().set(array![2., 3., 4.]);
     env.run(|g| {
         let v = g.variable_by_id(v);
-        let z = g.reduce_mean(v, &[0], false); // keep_dims=false
-        let grad = g.grad(&[z], &[v])[0];
+        let z = T::reduce_mean(v, &[0], false); // keep_dims=false
+        let grad = T::grad(&[z], &[v])[0];
         assert_eq!(grad.eval(&[], g).unwrap().shape(), &[3]);
     });
 }
@@ -65,8 +66,8 @@ fn transpose_matmul_square() {
     env.run(|g| {
         let x = g.convert_to_tensor(array![[0., 1.], [2., 3.]]);
         let w = g.convert_to_tensor(array![[0., 1.], [2., 3.]]);
-        let w2 = g.transpose(w, &[1, 0]);
-        let mm = g.matmul(x, w2);
+        let w2 = T::transpose(w, &[1, 0]);
+        let mm = T::matmul(x, w2);
         assert_eq!(
             mm.eval(&[], g).unwrap().as_slice().unwrap(),
             &[1., 3., 3., 13.]
@@ -80,8 +81,8 @@ fn transpose_matmul() {
     env.run(|g| {
         let x = g.convert_to_tensor(array![[0., 1., 2.], [3., 4., 5.]]);
         let w = g.convert_to_tensor(array![[0., 1.], [2., 3.]]);
-        let x2 = g.transpose(x, &[1, 0]).show();
-        let mm = g.matmul(x2, w).show();
+        let x2 = T::transpose(x, &[1, 0]).show();
+        let mm = T::matmul(x2, w).show();
         assert_eq!(
             mm.eval(&[], g).unwrap().as_slice().unwrap(),
             &[6., 9., 8., 13., 10., 17.]
@@ -95,7 +96,7 @@ fn test_mm() {
     env.run(|g: &mut ag::Graph<f32>| {
         let a = g.ones(&[2, 5]);
         let b = g.ones(&[5, 1]);
-        let c = g.matmul(&a, &b);
+        let c = T::matmul(&a, &b);
         let d = c.eval(&[], g).unwrap();
         assert_eq!(d.as_slice().unwrap(), &[5., 5.]);
     });
@@ -108,7 +109,7 @@ fn test_batch_matmul_normal() {
     env.run(|g: &mut ag::Graph<f32>| {
         let a: ag::Tensor<f32> = g.ones(&[2, 3, 4, 2]);
         let b: ag::Tensor<f32> = g.ones(&[2, 3, 2, 3]);
-        let c = g.batch_matmul(a, b);
+        let c = T::batch_matmul(a, b);
         let shape = &[2, 3, 4, 3];
         let size = shape.iter().product();
         let ans = NdArray::<_>::from_shape_vec(ndarray::IxDyn(shape), vec![2f32; size]).unwrap();
@@ -126,7 +127,7 @@ fn test_batch_matmul_trans_not_square() {
             g.convert_to_tensor(array![[[1., 2.], [3., 4.]], [[1., 2.], [3., 4.]]]);
         let b: ag::Tensor<f32> =
             g.convert_to_tensor(array![[[1., 2.], [3., 4.]], [[1., 2.], [3., 4.]]]);
-        let c = g.batch_matmul(a, b);
+        let c = T::batch_matmul(a, b);
         let ans = array![[[7., 10.], [15., 22.]], [[7., 10.], [15., 22.]]].into_dyn();
         let ret = c.eval(&[], g).unwrap();
         assert!(ret.all_close(&ans, 1e-4));
@@ -137,15 +138,15 @@ fn test_batch_matmul_trans_not_square() {
 #[test]
 fn test_batch_matmul_trans_square_both() {
     // blas is not used
-    let mut env = VariableEnvironment::new();
+    let mut env = VariableEnvironment::<f32>::new();
     env.run(|g: &mut ag::Graph<f32>| {
         let a_: ag::Tensor<f32> =
             g.convert_to_tensor(array![[[1., 2.], [3., 4.]], [[1., 2.], [3., 4.]]]);
         let b_: ag::Tensor<f32> =
             g.convert_to_tensor(array![[[1., 2.], [3., 4.]], [[1., 2.], [3., 4.]]]);
-        let a: ag::Tensor<f32> = g.transpose(a_, &[0, 2, 1]);
-        let b: ag::Tensor<f32> = g.transpose(b_, &[0, 2, 1]);
-        let c = g.batch_matmul(a, b);
+        let a: ag::Tensor<f32> = T::transpose(a_, &[0, 2, 1]);
+        let b: ag::Tensor<f32> = T::transpose(b_, &[0, 2, 1]);
+        let c = T::batch_matmul(a, b);
         let ans = array![[[7., 15.], [10., 22.]], [[7., 15.], [10., 22.]]].into_dyn();
         let ret = c.eval(&[], g).unwrap();
         assert!(ret.all_close(&ans, 1e-4));
@@ -160,10 +161,10 @@ fn test_batch_matmul_trans_square_lhs() {
     env.run(|g: &mut ag::Graph<f32>| {
         let a_: ag::Tensor<f32> =
             g.convert_to_tensor(array![[[1., 2.], [3., 4.]], [[1., 2.], [3., 4.]]]);
-        let a: ag::Tensor<f32> = g.transpose(a_, &[0, 2, 1]);
+        let a: ag::Tensor<f32> = T::transpose(a_, &[0, 2, 1]);
         let b: ag::Tensor<f32> =
             g.convert_to_tensor(array![[[1., 2.], [3., 4.]], [[1., 2.], [3., 4.]]]);
-        let c = g.batch_matmul(a, b);
+        let c = T::batch_matmul(a, b);
         let ans = array![[[10., 14.], [14., 20.]], [[10., 14.], [14., 20.]]].into_dyn();
         let ret = c.eval(&[], g).unwrap();
         assert!(ret.all_close(&ans, 1e-4));
@@ -178,10 +179,10 @@ fn test_batch_matmul_with_copy() {
     env.run(|g: &mut ag::Graph<f32>| {
         let a_: ag::Tensor<f32> =
             g.convert_to_tensor(array![[[1., 2.], [3., 4.]], [[1., 2.], [3., 4.]]]);
-        let a: ag::Tensor<f32> = g.transpose(a_, &[0, 2, 1]);
+        let a: ag::Tensor<f32> = T::transpose(a_, &[0, 2, 1]);
         let b: ag::Tensor<f32> =
             g.convert_to_tensor(array![[[1., 2.], [3., 4.]], [[1., 2.], [3., 4.]]]);
-        let c = g.batch_matmul(a, b);
+        let c = T::batch_matmul(a, b);
         let ans = array![[[10., 14.], [14., 20.]], [[10., 14.], [14., 20.]]].into_dyn();
         let ret = c.eval(&[], g).unwrap();
         assert!(ret.all_close(&ans, 1e-4));

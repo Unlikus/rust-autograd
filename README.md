@@ -38,13 +38,14 @@ Computation graphs are created on the fly (a.k.a. *define-by-run*), but are not 
 This mechanism balances better performance and flexibility.
 ```rust
 use autograd as ag;
+use autograd::tensor_ops::*;
 
 ag::run(|g: &mut ag::Graph<_>| {
     let a: ag::Tensor<f32> = g.ones(&[60]);
     let b: ag::Tensor<f32> = g.ones(&[24]);
-    let c: ag::Tensor<f32> = g.reshape(a, &[3, 4, 5]);
-    let d: ag::Tensor<f32> = g.reshape(b, &[4, 3, 2]);
-    let e: ag::Tensor<f32> = g.tensordot(c, d, &[1, 0], &[0, 1]);
+    let c: ag::Tensor<f32> = reshape(a, &[3, 4, 5]);
+    let d: ag::Tensor<f32> = reshape(b, &[4, 3, 2]);
+    let e: ag::Tensor<f32> = tensordot(c, d, &[1, 0], &[0, 1]);
     let result: ag::ndarray::Array<_, _> = e.eval(&[], g).unwrap();  // Getting `ndarray::Array` here.
 });
 ```
@@ -57,6 +58,7 @@ you can also [define your own differentiable ops](https://docs.rs/autograd/???/a
 Here we are just computing partial derivatives of `z = 2x^2 + 3y + 1`.
  ```rust
 use autograd as ag;
+use autograd::tensor_ops::*;
 
 ag::run(|g: &mut ag::Graph<_>| {
     let x = g.placeholder(&[]);
@@ -68,11 +70,11 @@ ag::run(|g: &mut ag::Graph<_>| {
     println!("{:?}", gy.eval(&[], g));   // => Ok(3.)
 
     // dz/dx (requires to fill the placeholder `x`)
-    let gx = &g.grad(&[z], &[x])[0];
+    let gx = &grad(&[z], &[x])[0];
     let feed = ag::ndarray::arr0(2.);
     println!("{:?}", gx.eval(&[x.given(feed.view())], g));  // => Ok(8.)
     // ddz/dx (differentiates `z` again)
-    let ggx = &g.grad(&[gx], &[x])[0];
+    let ggx = &grad(&[gx], &[x])[0];
     println!("{:?}", ggx.eval(&[], g));  // => Ok(4.)
 });
  ```
@@ -81,9 +83,11 @@ ag::run(|g: &mut ag::Graph<_>| {
  This crate has various low-level features inspired by tensorflow/theano to train neural networks.
  Since computation graphs require only bare minimum of heap allocations, the overhead is small, even for complex networks.
  ```rust
- // This is a softmax regression for MNIST digits classification with Adam.
- // This achieves 0.918 test accuracy after 3 epochs (0.11 sec/epoch on 2.7GHz Intel Core i5).
+// This is a softmax regression for MNIST digits classification with Adam.
+// This achieves 0.918 test accuracy after 3 epochs (0.11 sec/epoch on 2.7GHz Intel Core i5).
 use autograd::{self as ag, optimizers::adam::Adam, variable::NamespaceTrait};
+use autograd::tensor_ops::*;
+use std::collections::HashMap;
 
 let mut env = ag::VariableEnvironment::new();
 
@@ -101,12 +105,12 @@ let max_epoch = 3;
 for epoch in 0..max_epoch {
     env.run(|g| {
         let ns = g.env().default_namespace();
-        let var = g.variable_map_by_name(&ns);
+        let var = g.var_tensors_by_name(&ns).collect::<HashMap<_, _>>();
         let x = g.placeholder(&[-1, 28*28]);
         let y = g.placeholder(&[-1]);
-        let z = g.matmul(x, var["w"]) + var["b"];
-        let mean_loss = g.reduce_mean(g.sparse_softmax_cross_entropy(z, &y), &[0], false);
-        let grads = &g.grad(&[&mean_loss], &[var["w"], var["b"]]);
+        let z = matmul(x, var["w"]) + var["b"];
+        let mean_loss = reduce_mean(sparse_softmax_cross_entropy(z, &y), &[0], false);
+        let grads = &grad(&[&mean_loss], &[var["w"], var["b"]]);
         let updates: &[ag::Tensor<f32>] =
             &adam.update(&[var["w"], var["b"]], grads, g);
 

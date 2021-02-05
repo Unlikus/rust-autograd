@@ -2,6 +2,7 @@
 use crate::runtime::Feed;
 use crate::tensor::Tensor;
 use crate::{ndarray_ext, Float, Graph};
+use crate::tensor_ops::*;
 
 /// Checks the validity of `gradients` with finite difference trick.
 /// For this test only, `variables` must be *shared* variables.
@@ -16,7 +17,7 @@ pub fn check_theoretical_grads<'g, 't, 'v, T: Float, A>(
 ) where
     A: AsRef<Tensor<'g, T>> + Copy,
 {
-    let objective = ctx.reduce_sum_to_scalar(objective);
+    let objective = reduce_sum_to_scalar(objective);
     // backprop
     let theoretical_grads = ctx.eval(gradients, feeds);
 
@@ -37,12 +38,13 @@ pub fn check_theoretical_grads<'g, 't, 'v, T: Float, A>(
         // for each values
         let v_len = ctx
             .env()
-            .get_variable(
+            .get_array_by_id(
                 var_node
                     .as_ref()
                     .get_variable_id()
                     .expect("This is not a variable"),
             )
+            .expect("variable array not found")
             .borrow()
             .len();
 
@@ -52,12 +54,13 @@ pub fn check_theoretical_grads<'g, 't, 'v, T: Float, A>(
             unsafe {
                 let mut guard_mut = ctx
                     .env()
-                    .get_variable(
+                    .get_array_by_id(
                         var_node
                             .as_ref()
                             .get_variable_id()
                             .expect("This is not a variable"),
                     )
+                    .expect("variable array not found")
                     .borrow_mut();
                 let head = guard_mut.as_mut_ptr();
                 evacuated = *head.offset(i);
@@ -76,12 +79,13 @@ pub fn check_theoretical_grads<'g, 't, 'v, T: Float, A>(
             unsafe {
                 let mut guard_mut = ctx
                     .env()
-                    .get_variable(
+                    .get_array_by_id(
                         var_node
                             .as_ref()
                             .get_variable_id()
                             .expect("This is not a variable"),
                     )
+                    .expect("variable array not found")
                     .borrow_mut();
 
                 let head = guard_mut.as_mut_ptr();
@@ -100,12 +104,13 @@ pub fn check_theoretical_grads<'g, 't, 'v, T: Float, A>(
             unsafe {
                 let mut guard_mut = ctx
                     .env()
-                    .get_variable(
+                    .get_array_by_id(
                         var_node
                             .as_ref()
                             .get_variable_id()
                             .expect("This is not a variable"),
                     )
+                    .expect("variable array not found")
                     .borrow_mut();
                 let head = guard_mut.as_mut_ptr();
                 *head.offset(i) = evacuated;

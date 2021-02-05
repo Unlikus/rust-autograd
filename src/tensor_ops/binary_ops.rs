@@ -3,6 +3,7 @@ use crate::op;
 use crate::tensor::Tensor;
 use crate::Float;
 use crate::GraphRepr;
+use crate::tensor_ops::*;
 /// Implement +, -, *, / operators for Tensor
 /// +=, -=, *=, /= are provided as methods of c.inplace_*.
 /// *=, /= don't propagate gradients.
@@ -96,10 +97,10 @@ impl<T: Float> op::Op<T> for MaybeReduce {
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let g = ctx.graph();
-        let gx = Tensor::builder(ctx.graph())
+        let gx = Tensor::builder(g)
             .append_input(&ctx.output_grad(), false)
-            .append_input(&g.shape(ctx.input(0)), false)
-            .build(g, MaybeBroadcast);
+            .append_input(&shape(ctx.input(0)), false)
+            .build(MaybeBroadcast);
         ctx.append_input_grad(Some(gx));
         ctx.append_input_grad(None);
     }
@@ -139,7 +140,7 @@ impl<T: Float> op::Op<T> for MaybeBroadcast {
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let g = ctx.graph();
-        let gx = maybe_reduce(&g.shape(ctx.input(0)), &ctx.output_grad(), g);
+        let gx = maybe_reduce(&shape(ctx.input(0)), &ctx.output_grad(), g);
         ctx.append_input_grad(Some(gx));
         ctx.append_input_grad(None);
     }
@@ -157,8 +158,8 @@ impl<T: Float> op::Op<T> for AddOp {
         let x0 = ctx.input(0);
         let x1 = ctx.input(1);
         let gy = ctx.output_grad();
-        let shape0 = &ctx.graph().shape(x0);
-        let shape1 = &ctx.graph().shape(x1);
+        let shape0 = &shape(x0);
+        let shape1 = &shape(x1);
         let gy0 = maybe_reduce(shape0, &gy, g);
         let gy1 = maybe_reduce(shape1, &gy, g);
         ctx.append_input_grad(Some(gy0));
@@ -172,14 +173,14 @@ impl<T: Float> op::Op<T> for SubOp {
         let x1 = &ctx.input(1);
         let shape0: &[usize] = x0.shape();
         let shape1: &[usize] = x1.shape();
-        let ret = if shape0 == [] {
+        let ret = if shape0.len() == 0 {
             // is scalar
             let x0_elem = x0[ndarray::IxDyn(&[])];
             x1.map(move |&a| x0_elem - a)
         } else if shape0 == shape1 {
             #[cfg(feature = "mkl")]
             {
-                use crate::{ops::blas_ffi::*, same_type};
+                use crate::{tensor_ops::blas_ffi::*, same_type};
                 bin_op_same_shape!(vsSub, vdSub, -, x0, x1)
             }
             #[cfg(not(feature = "mkl"))]
@@ -197,13 +198,13 @@ impl<T: Float> op::Op<T> for SubOp {
         let g = ctx.graph();
         let x0 = ctx.input(0);
         let x1 = ctx.input(1);
-        let shape0 = &ctx.graph().shape(x0);
-        let shape1 = &ctx.graph().shape(x1);
+        let shape0 = &shape(x0);
+        let shape1 = &shape(x1);
         let gy = &ctx.output_grad();
         let gy0 = maybe_reduce(shape0, gy, g);
         let gy1 = maybe_reduce(shape1, gy, g);
         ctx.append_input_grad(Some(gy0));
-        ctx.append_input_grad(Some(g.neg(&gy1)));
+        ctx.append_input_grad(Some(neg(&gy1)));
     }
 }
 
@@ -221,8 +222,8 @@ impl<T: Float> op::Op<T> for MulOp {
         let x0 = ctx.input(0);
         let x1 = ctx.input(1);
 
-        let shape0 = &graph.shape(x0);
-        let shape1 = &graph.shape(x1);
+        let shape0 = &shape(x0);
+        let shape1 = &shape(x1);
 
         let gy = ctx.output_grad();
 
@@ -243,8 +244,8 @@ impl<T: Float> op::Op<T> for DivOp {
         let x1 = &ctx.input(1);
         let shape0: &[usize] = x0.shape();
         let shape1: &[usize] = x1.shape();
-        let is_scalar0 = shape0 == [] || shape0 == [0];
-        let is_scalar1 = shape1 == [] || shape1 == [1];
+        let is_scalar0 = shape0.len() == 0 || shape0 == [0];
+        let is_scalar1 = shape1.len() == 0 || shape1 == [1];
         let ret = if is_scalar0 {
             // a is a scalar
             let x0_elem = x0[ndarray::IxDyn(&[])];
@@ -257,7 +258,7 @@ impl<T: Float> op::Op<T> for DivOp {
         } else if shape0 == shape1 {
             #[cfg(feature = "mkl")]
             {
-                use crate::{ops::blas_ffi::*, same_type};
+                use crate::{tensor_ops::blas_ffi::*, same_type};
                 bin_op_same_shape!(vsDiv, vdDiv, /, x0, x1)
             }
             #[cfg(not(feature = "mkl"))]
@@ -275,12 +276,12 @@ impl<T: Float> op::Op<T> for DivOp {
         let g = ctx.graph();
         let x0 = ctx.input(0);
         let x1 = ctx.input(1);
-        let shape0 = &g.shape(x0);
-        let shape1 = &g.shape(x1);
+        let shape0 = &shape(x0);
+        let shape1 = &shape(x1);
         let gy = ctx.output_grad();
 
         let gx0 = gy / x1;
-        let gx1 = g.neg(x0) * g.pow(x1, T::from(-2.).unwrap()) * gy;
+        let gx1 = neg(x0) * pow(x1, T::from(-2.).unwrap()) * gy;
 
         let gx0 = maybe_reduce(shape0, &gx0, g);
         let gx1 = maybe_reduce(shape1, &gx1, g);
@@ -299,7 +300,7 @@ fn maybe_reduce<'g, T: Float>(
         .append_input(x, false)
         .append_input(target_shape, false)
         .set_shape(target_shape)
-        .build(graph, MaybeReduce)
+        .build(MaybeReduce)
 }
 
 macro_rules! impl_bin_op_forward {
@@ -308,7 +309,7 @@ macro_rules! impl_bin_op_forward {
         {
             let shape0: &[usize] = x0.shape();
             let shape1: &[usize] = x1.shape();
-            let scalar_shape = &[];
+            let scalar_shape: &[usize] = &[];
             let scalar_shape1 = &[0];
 
             let x0_is_scalar = shape0 == scalar_shape || shape0 == scalar_shape1;

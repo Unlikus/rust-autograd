@@ -1,7 +1,7 @@
 use crate::ndarray_ext::{NdArray, NdArrayView};
 use crate::op;
 #[cfg(all(feature = "blas", feature = "intel-mkl"))]
-use crate::ops::blas_ffi::*;
+use crate::tensor_ops::blas_ffi::*;
 #[cfg(all(feature = "blas", feature = "intel-mkl"))]
 use crate::same_type;
 use crate::tensor::Tensor;
@@ -9,6 +9,7 @@ use crate::Float;
 use crate::GraphRepr;
 use ndarray;
 use ndarray::Zip;
+use crate::tensor_ops::*;
 
 pub struct Sin;
 pub struct Cos;
@@ -49,35 +50,35 @@ pub struct Transpose {
 }
 
 #[inline(always)]
-fn equal<T: Float>(a: T, b: T) -> T {
+fn equal_fn<T: Float>(a: T, b: T) -> T {
     T::from((a == b) as i32).unwrap()
 }
 #[inline(always)]
-fn not_equal<T: Float>(a: T, b: T) -> T {
+fn not_equal_fn<T: Float>(a: T, b: T) -> T {
     T::from((a != b) as i32).unwrap()
 }
 #[inline(always)]
-fn greater<T: Float>(a: T, b: T) -> T {
+fn greater_fn<T: Float>(a: T, b: T) -> T {
     T::from((a > b) as i32).unwrap()
 }
 #[inline(always)]
-fn lesser<T: Float>(a: T, b: T) -> T {
+fn lesser_fn<T: Float>(a: T, b: T) -> T {
     T::from((a < b) as i32).unwrap()
 }
 #[inline(always)]
-fn greater_equal<T: Float>(a: T, b: T) -> T {
+fn greater_equal_fn<T: Float>(a: T, b: T) -> T {
     T::from((a >= b) as i32).unwrap()
 }
 #[inline(always)]
-fn lesser_equal<T: Float>(a: T, b: T) -> T {
+fn lesser_equal_fn<T: Float>(a: T, b: T) -> T {
     T::from((a <= b) as i32).unwrap()
 }
 #[inline(always)]
-fn maximum<T: Float>(a: T, b: T) -> T {
+fn maximum_fn<T: Float>(a: T, b: T) -> T {
     a.max(b)
 }
 #[inline(always)]
-fn minimum<T: Float>(a: T, b: T) -> T {
+fn minimum_fn<T: Float>(a: T, b: T) -> T {
     a.min(b)
 }
 
@@ -173,14 +174,14 @@ macro_rules! impl_cmp_op {
     };
 }
 
-impl_cmp_op!(Equal, "Equal", equal, none_grad);
-impl_cmp_op!(NotEqual, "NotEqual", not_equal, none_grad);
-impl_cmp_op!(Greater, "Greater", greater, none_grad);
-impl_cmp_op!(Lesser, "Lesser", lesser, none_grad);
-impl_cmp_op!(GreaterEqual, "GreaterEqual", greater_equal, none_grad);
-impl_cmp_op!(LesserEqual, "LesserEqual", lesser_equal, none_grad);
-impl_cmp_op!(Maximum, "Maximum", maximum, min_max_grad);
-impl_cmp_op!(Minimum, "Minimum", minimum, min_max_grad);
+impl_cmp_op!(Equal, "Equal", equal_fn, none_grad);
+impl_cmp_op!(NotEqual, "NotEqual", not_equal_fn, none_grad);
+impl_cmp_op!(Greater, "Greater", greater_fn, none_grad);
+impl_cmp_op!(Lesser, "Lesser", lesser_fn, none_grad);
+impl_cmp_op!(GreaterEqual, "GreaterEqual", greater_equal_fn, none_grad);
+impl_cmp_op!(LesserEqual, "LesserEqual", lesser_equal_fn, none_grad);
+impl_cmp_op!(Maximum, "Maximum", maximum_fn, min_max_grad);
+impl_cmp_op!(Minimum, "Minimum", minimum_fn, min_max_grad);
 
 #[inline]
 fn none_grad<'g, T: Float>(
@@ -203,10 +204,10 @@ fn min_max_grad<'g, T: Float>(
     c: &'g GraphRepr<T>,
     ctx: &mut crate::op::GradientContext<'g, T>,
 ) {
-    let selected_a = c.equal(x1, y);
-    let selected_b = c.equal(x2, y);
-    ctx.append_input_grad(Some(c.mul(selected_a, gy)));
-    ctx.append_input_grad(Some(c.mul(selected_b, gy)));
+    let selected_a = equal(x1, y);
+    let selected_b = equal(x2, y);
+    ctx.append_input_grad(Some(mul(selected_a, gy)));
+    ctx.append_input_grad(Some(mul(selected_b, gy)));
 }
 
 #[cfg(all(feature = "blas", feature = "intel-mkl"))]
@@ -290,7 +291,7 @@ impl<T: Float> op::Op<T> for Abs {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        ctx.append_input_grad(Some(ctx.output_grad() * ctx.graph().sign(ctx.input(0))));
+        ctx.append_input_grad(Some(ctx.output_grad() * sign(ctx.input(0))));
     }
 }
 
@@ -302,7 +303,7 @@ impl<T: Float> op::Op<T> for NegOp {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        ctx.append_input_grad(Some(ctx.graph().neg(ctx.output_grad())));
+        ctx.append_input_grad(Some(neg(ctx.output_grad())));
     }
 }
 
@@ -343,7 +344,7 @@ impl<T: Float> op::Op<T> for Inv {
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         ctx.append_input_grad(Some(
-            ctx.graph().neg(&ctx.graph().square(ctx.output())) * ctx.output_grad(),
+            neg(&square(ctx.output())) * ctx.output_grad(),
         ));
     }
 }
@@ -365,7 +366,7 @@ impl<T: Float> op::Op<T> for InvSqrt {
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let g = ctx.graph();
         let a = g.scalar(T::from(-0.5).unwrap());
-        let b = g.pow(ctx.input(0), T::from(-1.5).unwrap());
+        let b = pow(ctx.input(0), T::from(-1.5).unwrap());
         ctx.append_input_grad(Some(a * b * ctx.output_grad()));
     }
 }
@@ -459,9 +460,8 @@ impl<T: Float> op::Op<T> for Transpose {
         let gx = Tensor::builder(ctx.graph())
             .append_input(&ctx.output_grad(), false)
             .append_input(&ctx.input(1), false)
-            .set_shape(&ctx.graph().shape(&ctx.input(0)))
+            .set_shape(&shape(&ctx.input(0)))
             .build(
-                ctx.graph(),
                 Transpose {
                     invert_axes: !self.invert_axes,
                 },
@@ -609,7 +609,7 @@ impl<T: Float> op::Op<T> for LogSumExp {
         // let ref sum = c.exp(output);
         // let ref exp = c.exp(ctx.input(0));
         // let gx = gy * exp / sum;
-        let gx = ctx.graph().softmax(ctx.input(0), self.axis) * ctx.output_grad();
+        let gx = softmax(ctx.input(0), self.axis) * ctx.output_grad();
         ctx.append_input_grad(Some(gx))
     }
 }
@@ -631,7 +631,7 @@ impl<T: Float> op::Op<T> for Pow<T> {
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let x = ctx.input(0);
         let gx =
-            ctx.output_grad() * ctx.graph().scalar(self.a) * ctx.graph().pow(x, self.a - T::one());
+            ctx.output_grad() * ctx.graph().scalar(self.a) * pow(x, self.a - T::one());
         ctx.append_input_grad(Some(gx))
     }
 }
@@ -653,7 +653,7 @@ impl<T: Float> op::Op<T> for Sqrt {
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let x = ctx.input(0);
         let half = T::one() / (T::one() + T::one());
-        let ret = ctx.graph().scalar(half) * ctx.graph().pow(x, -half);
+        let ret = ctx.graph().scalar(half) * pow(x, -half);
         ctx.append_input_grad(Some(ctx.output_grad() * ret));
     }
 }
@@ -796,7 +796,7 @@ impl<T: Float> op::Op<T> for Atanh {
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let g = ctx.graph();
         let x = ctx.input(0);
-        let y = g.inv(1. - g.square(x));
+        let y = inv(1. - square(x));
         ctx.append_input_grad(Some(y * ctx.output_grad()));
     }
 }
@@ -818,7 +818,7 @@ impl<T: Float> op::Op<T> for Acosh {
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let g = ctx.graph();
         let x = ctx.input(0);
-        let y = g.inv(g.sqrt(g.square(x) - g.scalar(T::one())));
+        let y = inv(sqrt(square(x) - g.scalar(T::one())));
         ctx.append_input_grad(Some(y * ctx.output_grad()));
     }
 }
@@ -840,7 +840,7 @@ impl<T: Float> op::Op<T> for Asinh {
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let g = ctx.graph();
         let x = ctx.input(0);
-        let y = g.inv(g.sqrt(g.square(x) + g.scalar(T::one())));
+        let y = inv(sqrt(square(x) + g.scalar(T::one())));
         ctx.append_input_grad(Some(y * ctx.output_grad()));
     }
 }
@@ -861,7 +861,7 @@ impl<T: Float> op::Op<T> for Tanh {
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         ctx.append_input_grad(Some(
-            ctx.output_grad() * (ctx.graph().scalar(T::one()) - ctx.graph().square(ctx.output())),
+            ctx.output_grad() * (ctx.graph().scalar(T::one()) - square(ctx.output())),
         ));
     }
 }
@@ -881,7 +881,7 @@ impl<T: Float> op::Op<T> for Cosh {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        ctx.append_input_grad(Some(ctx.graph().sinh(ctx.input(0)) * ctx.output_grad()));
+        ctx.append_input_grad(Some(sinh(ctx.input(0)) * ctx.output_grad()));
     }
 }
 
@@ -900,7 +900,7 @@ impl<T: Float> op::Op<T> for Sinh {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        ctx.append_input_grad(Some(ctx.graph().cosh(ctx.input(0)) * ctx.output_grad()));
+        ctx.append_input_grad(Some(cosh(ctx.input(0)) * ctx.output_grad()));
     }
 }
 
@@ -921,7 +921,7 @@ impl<T: Float> op::Op<T> for Atan {
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let g = ctx.graph();
         let x = ctx.input(0);
-        let y = g.inv(g.square(x) + g.scalar(T::one()));
+        let y = inv(square(x) + g.scalar(T::one()));
         ctx.append_input_grad(Some(y * ctx.output_grad()));
     }
 }
@@ -941,9 +941,8 @@ impl<T: Float> op::Op<T> for Acos {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let g = ctx.graph();
         let x = ctx.input(0);
-        let y = g.neg(g.inv_sqrt(1. - g.square(x)));
+        let y = neg(inv_sqrt(1. - square(x)));
         ctx.append_input_grad(Some(y * ctx.output_grad()));
     }
 }
@@ -963,9 +962,8 @@ impl<T: Float> op::Op<T> for Asin {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let g = ctx.graph();
         let x = ctx.input(0);
-        let y = g.inv_sqrt(1. - g.square(x));
+        let y = inv_sqrt(1. - square(x));
         ctx.append_input_grad(Some(y * ctx.output_grad()));
     }
 }
@@ -985,7 +983,7 @@ impl<T: Float> op::Op<T> for Sin {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        ctx.append_input_grad(Some(ctx.graph().cos(ctx.input(0)) * ctx.output_grad()));
+        ctx.append_input_grad(Some(cos(ctx.input(0)) * ctx.output_grad()));
     }
 }
 
@@ -1005,7 +1003,7 @@ impl<T: Float> op::Op<T> for Cos {
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
         let g = ctx.graph();
-        ctx.append_input_grad(Some(g.neg(&(g.sin(ctx.input(0)) * ctx.output_grad()))));
+        ctx.append_input_grad(Some(neg(&(sin(ctx.input(0)) * ctx.output_grad()))));
     }
 }
 
@@ -1024,8 +1022,7 @@ impl<T: Float> op::Op<T> for Tan {
     }
 
     fn grad(&self, ctx: &mut crate::op::GradientContext<T>) {
-        let g = ctx.graph();
-        let cos = g.cos(&ctx.input(0));
-        ctx.append_input_grad(Some(ctx.output_grad() / g.square(cos)));
+        let cos = cos(&ctx.input(0));
+        ctx.append_input_grad(Some(ctx.output_grad() / square(cos)));
     }
 }

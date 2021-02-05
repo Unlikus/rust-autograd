@@ -1,6 +1,7 @@
 extern crate autograd as ag;
 extern crate ndarray;
 
+use ag::tensor_ops as T;
 use ag::VariableEnvironment;
 use ndarray::array;
 
@@ -10,7 +11,7 @@ fn scalar_add() {
     ctx.run(|g| {
         let x = g.placeholder(&[]);
         let y = x + 2.;
-        let grad = g.grad(&[y], &[x])[0];
+        let grad = T::grad(&[y], &[x])[0];
         assert_eq!(1., grad.eval(&[], g).unwrap()[ndarray::IxDyn(&[])]);
     });
 }
@@ -21,18 +22,18 @@ fn scalar_sub() {
     ctx.run(|g| {
         let x = g.placeholder(&[]);
         let y = x - 2.;
-        let grad = g.grad(&[y], &[x])[0];
+        let grad = T::grad(&[y], &[x])[0];
         assert_eq!(1., grad.eval(&[], g).unwrap()[ndarray::IxDyn(&[])]);
     });
 }
 
 #[test]
 fn scalar_mul() {
-    let mut ctx = ag::VariableEnvironment::new();
+    let mut ctx = ag::VariableEnvironment::<f64>::new();
     ctx.run(|g| {
         let x = g.placeholder(&[]);
         let y = 3. * x;
-        let grad = g.grad(&[y], &[x])[0];
+        let grad = T::grad(&[y], &[x])[0];
         assert_eq!(3., grad.eval(&[], g).unwrap()[ndarray::IxDyn(&[])]);
     });
 }
@@ -43,28 +44,29 @@ fn scalar_div() {
     ctx.run(|g| {
         let x = g.placeholder(&[]);
         let y = x / 3.;
-        let grad = g.grad(&[y], &[x])[0];
+        let grad = T::grad(&[y], &[x])[0];
         assert_eq!(1. / 3., grad.eval(&[], g).unwrap()[ndarray::IxDyn(&[])]);
     });
 }
 
 #[test]
 fn expr0() {
-    let mut ctx = ag::VariableEnvironment::new();
+    let mut ctx = ag::VariableEnvironment::<f64>::new();
     ctx.run(|g| {
         let x = g.placeholder(&[]);
         let y = 3. * x;
-        let grad = g.grad(&[y], &[x])[0];
+        let grad = T::grad(&[y], &[x])[0];
         assert_eq!(3., grad.eval(&[], g).unwrap()[ndarray::IxDyn(&[])]);
     });
 }
+
 #[test]
 fn expr1() {
     let mut ctx = ag::VariableEnvironment::new();
     ctx.run(|g| {
         let x = g.placeholder(&[]);
         let y = 3. * x + 2.;
-        let grad = g.grad(&[y], &[x])[0];
+        let grad = T::grad(&[y], &[x])[0];
         assert_eq!(3., grad.eval(&[], g).unwrap()[ndarray::IxDyn(&[])]);
     });
 }
@@ -75,7 +77,7 @@ fn expr2() {
     ctx.run(|g| {
         let x = g.placeholder(&[]);
         let y = 3. * x * x;
-        let grad = g.grad(&[y], &[x])[0];
+        let grad = T::grad(&[y], &[x])[0];
         assert_eq!(
             18.,
             grad.eval(&[x.given(ndarray::arr0(3.).view())], g).unwrap()[ndarray::IxDyn(&[])]
@@ -89,7 +91,7 @@ fn expr3() {
     ctx.run(|g| {
         let x = g.placeholder(&[]);
         let y = 3. * x * x + 2.;
-        let grad = g.grad(&[y], &[x])[0];
+        let grad = T::grad(&[y], &[x])[0];
         assert_eq!(
             18.,
             grad.eval(&[x.given(ndarray::arr0(3.).view())], g).unwrap()[ndarray::IxDyn(&[])]
@@ -103,7 +105,7 @@ fn expr4() {
     ctx.run(|g| {
         let x = g.placeholder(&[]);
         let y = 3. * x * x + 2. * x + 1.;
-        let grad = g.grad(&[y], &[x])[0];
+        let grad = T::grad(&[y], &[x])[0];
         assert_eq!(
             20.,
             grad.eval(&[x.given(ndarray::arr0(3.).view())], g).unwrap()[ndarray::IxDyn(&[])]
@@ -118,7 +120,7 @@ fn expr5() {
         let x1 = g.placeholder(&[]);
         let x2 = g.placeholder(&[]);
         let y = 3. * x1 * x1 + 2. * x1 + x2 + 1.;
-        let grad = g.grad(&[y], &[x1])[0];
+        let grad = T::grad(&[y], &[x1])[0];
         assert_eq!(
             20.,
             grad.eval(&[x1.given(ndarray::arr0(3.).view())], g).unwrap()[ndarray::IxDyn(&[])]
@@ -136,19 +138,19 @@ fn expr6() {
         let x1 = g.placeholder(&[]);
         let x2 = g.variable_by_id(x2);
         let y = 3. * x1 * x1 + 5. * x2;
-        let grad = g.grad(&[y], &[x2])[0];
+        let grad = T::grad(&[y], &[x2])[0];
         assert_eq!(5., grad.eval(&[], g).unwrap()[ndarray::IxDyn(&[])]);
     });
 }
 
 #[test]
 fn differentiate_twice() {
-    let mut ctx = ag::VariableEnvironment::new();
+    let mut ctx = ag::VariableEnvironment::<f64>::new();
     ctx.run(|g| {
         let x = g.placeholder(&[]);
         let y = x * x;
-        let g1 = g.grad(&[y], &[x])[0];
-        let g2 = g.grad(&[g1], &[x])[0];
+        let g1 = T::grad(&[y], &[x])[0];
+        let g2 = T::grad(&[g1], &[x])[0];
         assert_eq!(2., g2.eval(&[], g).unwrap()[ndarray::IxDyn(&[])]);
     });
 }
@@ -160,9 +162,9 @@ fn expr7() {
         let x1 = g.placeholder(&[]);
         let x2 = g.placeholder(&[]);
         let y = 2. * x1 * x1 + 3. * x2;
-        let g1 = g.grad(&[y], &[x1])[0];
-        let g2 = g.grad(&[y], &[x2])[0];
-        let gg1 = g.grad(&[g1], &[x1])[0];
+        let g1 = T::grad(&[y], &[x1])[0];
+        let g2 = T::grad(&[y], &[x2])[0];
+        let gg1 = T::grad(&[g1], &[x1])[0];
         assert_eq!(3., g2.eval(&[], g).unwrap()[ndarray::IxDyn(&[])]);
         assert_eq!(4., gg1.eval(&[], g).unwrap()[ndarray::IxDyn(&[])]);
         assert_eq!(
@@ -178,9 +180,9 @@ fn expr8() {
     env.run(|graph| {
         let x1 = graph.placeholder(&[]);
         let y = x1 * x1 * x1 * x1;
-        let g = graph.grad(&[y], &[x1])[0];
-        let gg = graph.grad(&[g], &[x1])[0];
-        let ggg = graph.grad(&[gg], &[x1])[0];
+        let g = T::grad(&[y], &[x1])[0];
+        let gg = T::grad(&[g], &[x1])[0];
+        let ggg = T::grad(&[gg], &[x1])[0];
         assert_eq!(
             48.,
             ggg.eval(&[x1.given(ndarray::arr0(2.).view())], graph)
@@ -198,7 +200,7 @@ fn scalar_tensor_add() {
         let v = graph.variable_by_id(v);
         let v2 = graph.variable_by_id(v2);
         let a: ag::Tensor<f64> = v2 + v;
-        let g = graph.grad(&[a], &[v]);
+        let g = T::grad(&[a], &[v]);
         assert_eq!(
             (&g[0]).eval(&[], graph).unwrap().shape(),
             v.eval(&[], graph).unwrap().shape()
@@ -216,7 +218,7 @@ fn scalar_tensor_add2() {
         let v = graph.variable_by_id(v);
         let v2 = graph.variable_by_id(v2);
         let a: ag::Tensor<f64> = v + v2;
-        let g = graph.grad(&[a], &[v]);
+        let g = T::grad(&[a], &[v]);
         assert_eq!(
             (&g[0]).eval(&[], graph).unwrap().shape(),
             v.eval(&[], graph).unwrap().shape()
@@ -234,7 +236,7 @@ fn scalar_tensor_sub() {
         let v = graph.variable_by_id(v);
         let v2 = graph.variable_by_id(v2);
         let a: ag::Tensor<f64> = v2 - v;
-        let g = graph.grad(&[a], &[v]);
+        let g = T::grad(&[a], &[v]);
         assert_eq!(
             (&g[0]).eval(&[], graph).unwrap().shape(),
             v.eval(&[], graph).unwrap().shape()
@@ -252,7 +254,7 @@ fn scalar_tensor_sub2() {
         let v = graph.variable_by_id(v);
         let v2 = graph.variable_by_id(v2);
         let a: ag::Tensor<f64> = v - v2;
-        let g = graph.grad(&[a], &[v]);
+        let g = T::grad(&[a], &[v]);
         assert_eq!(
             (&g[0]).eval(&[], graph).unwrap().shape(),
             v.eval(&[], graph).unwrap().shape()
@@ -270,7 +272,7 @@ fn scalar_tensor_mul() {
         let v = graph.variable_by_id(v);
         let v2 = graph.variable_by_id(v2);
         let a: ag::Tensor<f64> = v2 * v;
-        let g = graph.grad(&[a], &[v]);
+        let g = T::grad(&[a], &[v]);
         assert_eq!(
             (&g[0]).eval(&[], graph).unwrap().shape(),
             v.eval(&[], graph).unwrap().shape()
@@ -288,7 +290,7 @@ fn scalar_tensor_mul2() {
         let v = graph.variable_by_id(v);
         let v2 = graph.variable_by_id(v2);
         let a: ag::Tensor<f64> = v * v2;
-        let g = graph.grad(&[a], &[v]);
+        let g = T::grad(&[a], &[v]);
         assert_eq!(
             (&g[0]).eval(&[], graph).unwrap().shape(),
             v.eval(&[], graph).unwrap().shape()
@@ -306,7 +308,7 @@ fn scalar_tensor_div() {
         let v = graph.variable_by_id(v);
         let v2 = graph.variable_by_id(v2);
         let a: ag::Tensor<f64> = v / v2;
-        let g = graph.grad(&[a], &[v]);
+        let g = T::grad(&[a], &[v]);
         assert_eq!(
             (&g[0]).eval(&[], graph).unwrap().shape(),
             v.eval(&[], graph).unwrap().shape()
@@ -324,7 +326,7 @@ fn scalar_tensor_div2() {
         let v = graph.variable_by_id(v);
         let v2 = graph.variable_by_id(v2);
         let a: ag::Tensor<f64> = v2 / v;
-        let g = graph.grad(&[a], &[v]);
+        let g = T::grad(&[a], &[v]);
         assert_eq!(
             (&g[0]).eval(&[], graph).unwrap().shape(),
             v.eval(&[], graph).unwrap().shape()
@@ -342,9 +344,9 @@ fn scalar_tensor_mul_g3() {
         let v = graph.variable_by_id(v);
         let three = graph.variable_by_id(three);
         let y = three * v * v * v;
-        let g = graph.grad(&[y], &[v])[0];
-        let gg = graph.grad(&[g], &[v])[0];
-        let ggg = graph.grad(&[gg], &[v]);
+        let g = T::grad(&[y], &[v])[0];
+        let gg = T::grad(&[g], &[v])[0];
+        let ggg = T::grad(&[gg], &[v]);
         assert_eq!(
             (&ggg[0]).eval(&[], graph).unwrap().shape(),
             v.eval(&[], graph).unwrap().shape()
@@ -362,9 +364,9 @@ fn scalar_tensor_div_g3() {
         let v = graph.variable_by_id(v);
         let three = graph.variable_by_id(three);
         let y = three / v / v / v;
-        let g = graph.grad(&[y], &[v])[0];
-        let gg = graph.grad(&[g], &[v])[0];
-        let ggg = graph.grad(&[gg], &[v]);
+        let g = T::grad(&[y], &[v])[0];
+        let gg = T::grad(&[g], &[v])[0];
+        let ggg = T::grad(&[gg], &[v]);
         assert_eq!(
             (&ggg[0]).eval(&[], graph).unwrap().shape(),
             v.eval(&[], graph).unwrap().shape()

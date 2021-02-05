@@ -1,7 +1,7 @@
 //! Adam optimizer
-use crate::ops::gradient_descent_ops::adam;
+use crate::tensor_ops::gradient_descent_ops::adam;
 use crate::tensor::Tensor;
-use crate::variable::VariableID;
+use crate::variable::VarArrayID;
 use crate::{Float, Graph, VariableEnvironment};
 
 /// Adam optimizer
@@ -45,14 +45,14 @@ use crate::{Float, Graph, VariableEnvironment};
 /// See also <https://github.com/raskr/rust-autograd/blob/master/examples/>
 pub struct Adam<F: Float> {
     static_params: StaticParams<F>,
-    adam_namespace_name: &'static str,
+    adam_namespace_id: &'static str,
 }
 
 impl<'t, 'g, 's, F: Float> Adam<F> {
     /// Instantiates `Adam` optimizer with the recommended parameters in the original paper.
     pub fn default(
-        unique_namespace_name: &'static str,
-        var_id_list: impl IntoIterator<Item = VariableID>,
+        unique_namespace_id: &'static str,
+        var_id_list: impl IntoIterator<Item =VarArrayID>,
         env_handle: &mut VariableEnvironment<F>,
     ) -> Adam<F> {
         let static_params = StaticParams {
@@ -65,23 +65,23 @@ impl<'t, 'g, 's, F: Float> Adam<F> {
             static_params,
             var_id_list,
             env_handle,
-            unique_namespace_name,
+            unique_namespace_id,
         )
     }
 
     /// Instantiates `Adam` optimizer with given params.
     pub fn new(
         static_params: StaticParams<F>,
-        var_id_list: impl IntoIterator<Item = VariableID>,
+        var_id_list: impl IntoIterator<Item =VarArrayID>,
         env: &mut VariableEnvironment<F>,
-        adam_namespace_name: &'static str,
+        adam_namespace_id: &'static str,
     ) -> Adam<F> {
         for vid in var_id_list.into_iter() {
             let m_name = format!("{}m", vid);
             let v_name = format!("{}v", vid);
             let t_name = format!("{}t", vid);
             let (m, v, t) = {
-                let target_var = env.get_variable(vid).borrow();
+                let target_var = env.get_array_by_id(vid).expect("variable array not found").borrow();
                 let var_shape = target_var.shape();
                 (
                     crate::ndarray_ext::zeros(var_shape),
@@ -89,14 +89,14 @@ impl<'t, 'g, 's, F: Float> Adam<F> {
                     crate::ndarray_ext::from_scalar(F::one()),
                 )
             };
-            let mut adam_ns = env.namespace_mut(adam_namespace_name);
+            let mut adam_ns = env.namespace_mut(adam_namespace_id);
             adam_ns.slot().with_name(m_name).set(m);
             adam_ns.slot().with_name(v_name).set(v);
             adam_ns.slot().with_name(t_name).set(t);
         }
         Adam {
             static_params,
-            adam_namespace_name,
+            adam_namespace_id,
         }
     }
 
@@ -113,7 +113,7 @@ impl<'t, 'g, 's, F: Float> Adam<F> {
         let mut ret = Vec::with_capacity(num_params);
         for i in 0..num_params {
             let param = params[i].as_ref();
-            let namespace = g.env().namespace(&self.adam_namespace_name);
+            let namespace = g.env().namespace(&self.adam_namespace_id);
             let var_id = param.get_variable_id().expect("Got non-variable tensor");
             let m = g.variable_by_name(&format!("{}m", var_id), &namespace);
             let v = g.variable_by_name(&format!("{}v", var_id), &namespace);
@@ -127,7 +127,6 @@ impl<'t, 'g, 's, F: Float> Adam<F> {
                     .append_input(&v, true)
                     .append_input(&t, true)
                     .build(
-                        g.internal(),
                         adam::AdamOp {
                             static_params: self.static_params.clone(),
                         },
