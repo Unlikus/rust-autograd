@@ -134,7 +134,6 @@
 //! ```
 //!
 
-#![feature(member_constraints)]
 #[allow(unused_imports)]
 // Expose to prevent version conflict
 #[macro_use(s)]
